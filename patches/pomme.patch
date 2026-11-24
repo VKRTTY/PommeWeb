@@ -339,7 +339,7 @@ index 10482e5..e9b8381 100644
  
  [target.'cfg(target_os = "ios")'.dependencies]
 diff --git a/pomme-client/build.rs b/pomme-client/build.rs
-index e07e711..16314a5 100644
+index ec5bbe4..da5035d 100644
 --- a/pomme-client/build.rs
 +++ b/pomme-client/build.rs
 @@ -1,3 +1,5 @@
@@ -366,7 +366,7 @@ index e07e711..16314a5 100644
  
      // Includes resolve from the shader dir, falling back to OUT_DIR for
      // generated headers (packing.glsl).
-@@ -200,6 +206,14 @@ fn main() {
+@@ -202,6 +208,14 @@ fn main() {
      ];
  
      for (file, kind) in &shaders {
@@ -381,7 +381,7 @@ index e07e711..16314a5 100644
          let path = shader_dir.join(file);
          println!("cargo:rerun-if-changed={}", path.display());
  
-@@ -210,6 +224,12 @@ fn main() {
+@@ -212,6 +226,12 @@ fn main() {
              .compile_into_spirv(&source, *kind, file, "main", Some(&options))
              .unwrap_or_else(|e| panic!("failed to compile {file}: {e}"));
  
@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..c042045 100644
+index c5b3441..fe22cee 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -469,7 +469,7 @@ index cfadfa1..c042045 100644
  
  use glam::{FloatExt, dvec3};
  use pomme_protocol::serverbound::{
-@@ -1007,6 +1007,8 @@ impl RepeatStepper {
+@@ -1008,6 +1008,8 @@ impl RepeatStepper {
  }
  
  pub struct AppCore {
@@ -478,7 +478,7 @@ index cfadfa1..c042045 100644
      pub user: UserData,
      pub presence: Option<DiscordPresence>,
      pub display_mode: DisplayMode,
-@@ -1015,7 +1017,7 @@ pub struct AppCore {
+@@ -1016,7 +1018,7 @@ pub struct AppCore {
      pub window_size: winit::dpi::LogicalSize<u32>,
      pub input: InputState,
      pub menu: MainMenu,
@@ -487,7 +487,7 @@ index cfadfa1..c042045 100644
      pub data_dirs: DataDirs,
      pub version: String,
      builtin_resources: BuiltinRepositorySource,
-@@ -1160,7 +1162,7 @@ impl AppCore {
+@@ -1161,7 +1163,7 @@ impl AppCore {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -496,7 +496,7 @@ index cfadfa1..c042045 100644
          presence: Option<DiscordPresence>,
          user: UserData,
          window_size: winit::dpi::LogicalSize<u32>,
-@@ -1194,6 +1196,7 @@ impl AppCore {
+@@ -1195,6 +1197,7 @@ impl AppCore {
          let (head_tx, head_rx) = crossbeam_channel::unbounded();
  
          let mut core = Self {
@@ -504,7 +504,7 @@ index cfadfa1..c042045 100644
              user,
              presence,
              display_mode,
-@@ -1257,8 +1260,8 @@ impl AppCore {
+@@ -1258,8 +1261,8 @@ impl AppCore {
          self.registered_resources.set_symlink_policy(policy);
  
          let root = self.data_dirs.game_dir.join("resourcepacks");
@@ -515,7 +515,7 @@ index cfadfa1..c042045 100644
          {
              tracing::warn!(path = %root.display(), %error, "Cannot create resource pack directory");
          }
-@@ -2229,7 +2232,7 @@ impl AppCore {
+@@ -2290,7 +2293,7 @@ impl AppCore {
          let rx = &connection.event_rx;
  
          // Phase timers for the chunk-load benchmark's worst-frame breakdown.
@@ -524,7 +524,7 @@ index cfadfa1..c042045 100644
  
          // Block edits go on the priority lane so they apply instantly even while
          // chunks stream in, instead of starving behind the load backlog.
-@@ -2257,7 +2260,7 @@ impl AppCore {
+@@ -2318,7 +2321,7 @@ impl AppCore {
                      | NetworkEvent::LightUpdate { .. }
                      | NetworkEvent::ChunkBiomes { .. }
              )
@@ -533,7 +533,7 @@ index cfadfa1..c042045 100644
              match event {
                  NetworkEvent::ProtocolSelected { protocol } => game.select_protocol(protocol),
                  NetworkEvent::LoggedIn => {
-@@ -3084,10 +3087,16 @@ impl AppCore {
+@@ -3148,10 +3151,16 @@ impl AppCore {
                      flying_speed,
                      walking_speed,
                  } => {
@@ -554,7 +554,7 @@ index cfadfa1..c042045 100644
                  }
                  NetworkEvent::ServerViewDistance { distance } => {
                      game.set_server_view_distance(distance)
-@@ -3811,14 +3820,14 @@ impl AppCore {
+@@ -3942,14 +3951,14 @@ impl AppCore {
          // New chunk loads mark themselves dirty when their queued light
          // applies (GameState::update_light), which raises this flag.
          let loads_happened = std::mem::take(&mut game.pending_load_rescan);
@@ -572,7 +572,7 @@ index cfadfa1..c042045 100644
          game.rescan_mesh_jobs(self.menu.chunk_detail);
          game.last_update_phases.rescan_ms = ms(t_rescan);
  
-@@ -3963,7 +3972,8 @@ impl AppCore {
+@@ -4095,7 +4104,8 @@ impl AppCore {
          }
  
          // Vanilla ticks the camera FOV interpolation even while dead.
@@ -582,7 +582,7 @@ index cfadfa1..c042045 100644
          let fov_effect_scale = self.menu.fov_effect();
          renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
          // TODO: lava camera fluid (no eyes_in_lava).
-@@ -4286,6 +4296,8 @@ impl AppCore {
+@@ -4422,6 +4432,8 @@ impl AppCore {
              game.interaction.slow_due_to_using_item(),
              vehicle,
          );
@@ -591,7 +591,7 @@ index cfadfa1..c042045 100644
          let dx = game.player.position.x - game.player.prev_position.x;
          let dz = game.player.position.z - game.player.prev_position.z;
          crate::entity::update_walk_animation(
-@@ -4483,20 +4495,29 @@ impl AppCore {
+@@ -4619,20 +4631,29 @@ impl AppCore {
              || (look_dir.x_rot_deg() - game.last_sent_look_dir.x_rot_deg()) != 0.0;
  
          let flags = MoveFlags {
@@ -625,7 +625,7 @@ index cfadfa1..c042045 100644
                  flags,
              });
          } else if rot_changed {
-@@ -4507,8 +4528,16 @@ impl AppCore {
+@@ -4643,8 +4664,16 @@ impl AppCore {
              });
          } else if game.player.on_ground != game.last_sent_on_ground
              || game.player.horizontal_collision != game.last_sent_horizontal_collision
@@ -852,10 +852,10 @@ index 51fb7e7..4fcbf6e 100644
  /// Vanilla `CLIENT_WAIT_TIMEOUT_MS`: let the player in regardless after this
  /// long, counted from the login/respawn that started the load.
 diff --git a/pomme-client/src/app/mod.rs b/pomme-client/src/app/mod.rs
-index e9b59ba..39a2426 100644
+index 0ae036f..f94f0fa 100644
 --- a/pomme-client/src/app/mod.rs
 +++ b/pomme-client/src/app/mod.rs
-@@ -10,7 +10,8 @@ pub mod state_slot;
+@@ -11,7 +11,8 @@ pub mod state_slot;
  use std::mem::ManuallyDrop;
  use std::rc::Rc;
  use std::sync::Arc;
@@ -865,7 +865,7 @@ index e9b59ba..39a2426 100644
  
  use thiserror::Error;
  use winit::application::ApplicationHandler;
-@@ -226,6 +227,8 @@ fn start_connecting(
+@@ -227,6 +228,8 @@ fn start_connecting(
                  .join(crate::renderer::distant::worker::folder_name(server)),
          ),
          (None, Transport::Memory { .. }) => None,
@@ -874,7 +874,7 @@ index e9b59ba..39a2426 100644
      };
      let connection = spawn_connection(&core.tokio_rt, connect_args);
      // An options save from before the session is no reason to tell this
-@@ -257,7 +260,7 @@ impl App {
+@@ -258,7 +261,7 @@ impl App {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -883,7 +883,7 @@ index e9b59ba..39a2426 100644
          presence: Option<crate::discord::DiscordPresence>,
          user: UserData,
          quick_play: Option<QuickPlay>,
-@@ -472,6 +475,10 @@ impl App {
+@@ -473,6 +476,10 @@ impl App {
          if let Some(gfx) = self.phase.gfx_mut() {
              gfx.window.request_redraw();
          }
@@ -894,7 +894,7 @@ index e9b59ba..39a2426 100644
      }
  
      /// Updates a release build to the newest release before the menu.
-@@ -511,6 +518,13 @@ impl App {
+@@ -512,6 +519,13 @@ impl App {
          Ok(())
      }
  
@@ -908,7 +908,7 @@ index e9b59ba..39a2426 100644
      /// A text field has keyboard focus: chat and the in-game fields, or a
      /// menu form's.
      #[cfg(mobile)]
-@@ -664,7 +678,16 @@ fn create_window(
+@@ -665,7 +679,16 @@ fn create_window(
          .with_visible(cfg!(mobile))
          .with_active(!core.test_window)
          .with_window_icon(window_icon);
@@ -926,7 +926,7 @@ index e9b59ba..39a2426 100644
          // In pixels, as vanilla's `--width` is, so shots are the same size at
          // any display scale.
          let size = core.window_size;
-@@ -826,6 +849,10 @@ impl ApplicationHandler for App {
+@@ -827,6 +850,10 @@ impl ApplicationHandler for App {
          if let Some(install) = &mut self.install {
              match event {
                  WindowEvent::RedrawRequested => {
@@ -937,7 +937,7 @@ index e9b59ba..39a2426 100644
                      let step = install.frame(&self.core);
                      if matches!(step, install::Step::Relaunched) {
                          event_loop.exit();
-@@ -908,6 +935,17 @@ impl ApplicationHandler for App {
+@@ -909,6 +936,17 @@ impl ApplicationHandler for App {
                          self.core.input.on_key_event(&event);
                          return app;
                      }
@@ -955,7 +955,7 @@ index e9b59ba..39a2426 100644
                      // F3 held suppresses global keys (vanilla
                      // handleGlobalKeyPress); press only, no repeat.
                      if let Some(Gfx { window, .. }) = app.gfx_mut()
-@@ -1120,6 +1158,13 @@ impl ApplicationHandler for App {
+@@ -1121,6 +1159,13 @@ impl ApplicationHandler for App {
                                      }
                                  } else {
                                      match code {
@@ -969,7 +969,7 @@ index e9b59ba..39a2426 100644
                                          // F3+Esc pauses without opening the
                                          // menu (vanilla pauseGame(true)).
                                          _ if self
-@@ -1522,9 +1567,14 @@ impl ApplicationHandler for App {
+@@ -1523,9 +1568,14 @@ impl ApplicationHandler for App {
                      // Paced here so input arriving during the wait is pumped before the next frame.
                      gfx.renderer.pace_frame();
                  }
@@ -985,7 +985,7 @@ index e9b59ba..39a2426 100644
              _ => {}
          }
 diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
-index a9c5416..a87ad81 100644
+index ea34d1f..3026c4c 100644
 --- a/pomme-client/src/app/phases/in_game.rs
 +++ b/pomme-client/src/app/phases/in_game.rs
 @@ -1,7 +1,7 @@
@@ -1006,7 +1006,7 @@ index a9c5416..a87ad81 100644
      pub server_links: Vec<crate::ui::server_dialog::ServerLink>,
      pub dialog_registry: Arc<crate::ui::server_dialog::DialogRegistry>,
      /// The connection is in the configuration phase (the join, or a
-@@ -638,6 +640,7 @@ impl GameState {
+@@ -640,6 +642,7 @@ impl GameState {
              },
              server_dialog: None,
              sign_editor: None,
@@ -1014,7 +1014,7 @@ index a9c5416..a87ad81 100644
              server_links: Vec::new(),
              dialog_registry: Arc::default(),
              configuring: true,
-@@ -1029,7 +1032,10 @@ impl GameState {
+@@ -1024,7 +1027,10 @@ impl GameState {
      }
  
      pub fn gui_open(&self) -> bool {
@@ -1026,7 +1026,7 @@ index a9c5416..a87ad81 100644
      }
  
      /// Vanilla `Screen.isInGameUi`: the open screen is a container or a sign.
-@@ -1822,7 +1828,7 @@ impl GameState {
+@@ -1817,7 +1823,7 @@ impl GameState {
      /// in before the game phase takes over.
      pub fn drain_and_upload_meshes(&mut self, renderer: &mut Renderer) {
          let mut batch = self.drain_meshes();
@@ -1035,7 +1035,7 @@ index a9c5416..a87ad81 100644
          renderer.upload_distant(self.distant.drain());
          let (wanted, gone) = renderer.take_distant_requests();
          self.distant.request(wanted, gone);
-@@ -1846,7 +1852,7 @@ impl GameState {
+@@ -1841,7 +1847,7 @@ impl GameState {
      /// The meshes still waiting to upload and then the frame's ready ones,
      /// stale ones dropped.
      pub fn drain_meshes(&mut self) -> Vec<ChunkMeshData> {
@@ -1044,7 +1044,7 @@ index a9c5416..a87ad81 100644
          let mut batch = std::mem::take(&mut self.pending_upload);
          for mesh in self.mesh_dispatcher.drain_results(batch.len()) {
              // Stale meshes count too: worker time spent is worker time spent.
-@@ -1896,7 +1902,7 @@ impl GameState {
+@@ -1891,7 +1897,7 @@ impl GameState {
          // an opened one yet.
          let mut tracker = LevelLoadTracker::start_client_load(
              std::time::Duration::ZERO,
@@ -1053,7 +1053,7 @@ index a9c5416..a87ad81 100644
          );
          // 1.20.1 and 1.20.2 have no LEVEL_CHUNKS_LOAD_START game event (1.20.4
          // added it), so nothing would ever move the tracker on; those clients
-@@ -3158,7 +3164,11 @@ fn run_ticks(
+@@ -3155,7 +3161,11 @@ fn run_ticks(
      }
      gfx.renderer.tick_lightmap(lightmap_info(
          game,
@@ -1066,7 +1066,7 @@ index a9c5416..a87ad81 100644
          sky_partial_tick(core),
      ));
  }
-@@ -3173,9 +3183,19 @@ pub fn update_game(
+@@ -3170,9 +3180,19 @@ pub fn update_game(
  ) -> GameUpdateResult {
      // Snapshot last frame's phase timings before this frame overwrites them: they
      // align with `raw_dt`, which measures the previous frame's full duration.
@@ -1087,7 +1087,7 @@ index a9c5416..a87ad81 100644
      // Position the audio listener at the player's head and push current
      // volumes before draining sound packets this frame.
      let listener_pos = game.player.eye_pos();
-@@ -3239,7 +3259,9 @@ pub fn update_game(
+@@ -3236,7 +3256,9 @@ pub fn update_game(
      run_ticks(core, gfx, connection, game, carried);
  
      // Added before the drain, which takes every packet when a tick is owed.
@@ -1098,7 +1098,7 @@ index a9c5416..a87ad81 100644
      let disconnect_reason =
          core.drain_network_events(connection, None, &mut gfx.renderer, &gfx.window, game);
      crate::ui::menu::sync_resource_packs(core);
-@@ -3313,7 +3335,7 @@ pub fn update_game(
+@@ -3310,7 +3332,7 @@ pub fn update_game(
          core.apply_cursor_grab(&gfx.window, Some(game));
      }
      // TODO: remaining vanilla keybinds with no backing feature yet:
@@ -1107,7 +1107,7 @@ index a9c5416..a87ad81 100644
      // G quick actions, C/X creative saved hotbars, spectator hotbar select.
  
      // Finished F2 captures announce in chat (vanilla screenshot.success: bare
-@@ -3920,7 +3942,7 @@ pub fn update_game(
+@@ -3908,7 +3930,7 @@ pub fn update_game(
      // Vanilla Hud.extractSubtitleOverlay: drawn last when no screen or an
      // in-game one is open (then even with F1), else here under the screen.
      // The queue is empty while the option is off.
@@ -1116,7 +1116,7 @@ index a9c5416..a87ad81 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
-@@ -4172,7 +4194,37 @@ pub fn update_game(
+@@ -4160,7 +4182,37 @@ pub fn update_game(
              .build(sw, sh, &menu_input, &mut core.input.key_bindings, |t, s| {
                  r.menu_text_width(t, s)
              });
@@ -1155,7 +1155,7 @@ index a9c5416..a87ad81 100644
          core.input.clear_just_pressed_actions();
          core.sync_display_mode(&gfx.window);
      } else if game.death_screen_open && !dialog_open {
-@@ -4212,7 +4264,9 @@ pub fn update_game(
+@@ -4200,7 +4252,9 @@ pub fn update_game(
          let clicked = core.input.left_just_pressed();
          // Vanilla `PauseScreen.extractBackground`: blurred while the menu
          // shows; F3+Esc's hidden pause draws nothing.
@@ -1166,7 +1166,7 @@ index a9c5416..a87ad81 100644
          pause_action = pause::build_pause_menu(
              &mut elements,
              sw,
-@@ -4223,10 +4277,59 @@ pub fn update_game(
+@@ -4211,10 +4265,59 @@ pub fn update_game(
              game.pause_screen,
              game.server_render_distance,
              game.singleplayer,
@@ -1226,7 +1226,7 @@ index a9c5416..a87ad81 100644
      let mut player_preview = None;
      let mut book_preview = None;
      let mut screen_pointer = false;
-@@ -5622,6 +5725,15 @@ pub fn update_game(
+@@ -5658,6 +5761,15 @@ pub fn update_game(
          PauseAction::Disconnect => {
              return GameUpdateResult::ManualDisconnect;
          }
@@ -1242,7 +1242,7 @@ index a9c5416..a87ad81 100644
          PauseAction::OpenBenchmark => {
              game.pause_screen = PauseScreen::Benchmark;
          }
-@@ -5652,6 +5764,7 @@ pub fn update_game(
+@@ -5688,6 +5800,7 @@ pub fn update_game(
              game.paused = false;
              core.apply_cursor_grab(&gfx.window, Some(game));
          }
@@ -1285,7 +1285,7 @@ index 1d0cc61..21a6449 100644
      }
  }
 diff --git a/pomme-client/src/app/phases/mod.rs b/pomme-client/src/app/phases/mod.rs
-index 4dfe6b5..1758dff 100644
+index 896f4ca..d70994e 100644
 --- a/pomme-client/src/app/phases/mod.rs
 +++ b/pomme-client/src/app/phases/mod.rs
 @@ -1,7 +1,7 @@
@@ -1357,7 +1357,7 @@ index a9d05b3..100e1b0 100644
          write(b"library");
          remove_copy(&dir, "OpenAL.dll", b"library");
 diff --git a/pomme-client/src/audio/mod.rs b/pomme-client/src/audio/mod.rs
-index 2116cc5..6e84928 100644
+index cc2087b..8f57396 100644
 --- a/pomme-client/src/audio/mod.rs
 +++ b/pomme-client/src/audio/mod.rs
 @@ -1,5 +1,6 @@
@@ -1381,7 +1381,7 @@ index 2116cc5..6e84928 100644
  
  use self::decoder::{StreamDecoder, decode_all};
  use self::openal::{Buffer, Context, Source, SourceState};
-@@ -189,6 +193,8 @@ pub struct AudioEngine {
+@@ -192,6 +196,8 @@ pub struct AudioEngine {
      command_tx: Option<Sender<AudioCommand>>,
      event_rx: Receiver<AudioEvent>,
      worker: Option<JoinHandle<()>>,
@@ -1390,7 +1390,7 @@ index 2116cc5..6e84928 100644
      sounds: SoundsIndex,
      volumes: [f32; SoundCategory::COUNT],
      subtitles_enabled: bool,
-@@ -208,6 +214,7 @@ pub struct AudioEngine {
+@@ -211,6 +217,7 @@ pub struct AudioEngine {
  }
  
  impl AudioEngine {
@@ -1398,7 +1398,7 @@ index 2116cc5..6e84928 100644
      pub fn new(resources: &dyn ResourceManager, volumes: [f32; SoundCategory::COUNT]) -> Self {
          let sounds = SoundsIndex::load(resources);
          let (command_tx, command_rx) = crossbeam_channel::unbounded();
-@@ -264,6 +271,24 @@ impl AudioEngine {
+@@ -267,6 +274,24 @@ impl AudioEngine {
          Self::attached(command_tx, event_rx, worker, sounds, volumes)
      }
  
@@ -1423,7 +1423,7 @@ index 2116cc5..6e84928 100644
      /// Wraps an already-running (or absent) worker.
      fn attached(
          command_tx: Option<Sender<AudioCommand>>,
-@@ -276,6 +301,8 @@ impl AudioEngine {
+@@ -279,6 +304,8 @@ impl AudioEngine {
              command_tx,
              event_rx,
              worker,
@@ -1432,7 +1432,7 @@ index 2116cc5..6e84928 100644
              sounds,
              volumes,
              subtitles_enabled: false,
-@@ -572,6 +599,10 @@ impl AudioEngine {
+@@ -575,6 +602,10 @@ impl AudioEngine {
      /// Drains everything the worker has reported. Both phases call this every
      /// frame, so it must stay independent of whether menu music is running.
      pub fn poll_events(&mut self) {
@@ -1443,7 +1443,7 @@ index 2116cc5..6e84928 100644
          while let Ok(event) = self.event_rx.try_recv() {
              match event {
                  AudioEvent::Finished(id) => {
-@@ -684,6 +715,8 @@ impl AudioEngine {
+@@ -687,6 +718,8 @@ impl AudioEngine {
      }
  
      fn shut_down(&mut self) {
@@ -1452,7 +1452,7 @@ index 2116cc5..6e84928 100644
          if let Some(tx) = self.command_tx.take() {
              let _ = tx.send(AudioCommand::Shutdown);
          }
-@@ -759,6 +792,7 @@ impl AudioWorker {
+@@ -762,6 +795,7 @@ impl AudioWorker {
          }
      }
  
@@ -1460,7 +1460,7 @@ index 2116cc5..6e84928 100644
      fn run(mut self) {
          let mut shutdown = false;
          while !shutdown {
-@@ -783,6 +817,18 @@ impl AudioWorker {
+@@ -786,6 +820,18 @@ impl AudioWorker {
          self.static_buffers.clear();
      }
  
@@ -1618,7 +1618,7 @@ index 852e8b5..2a766c7 100644
  use crossbeam_channel::Receiver;
  use exec::Outcome;
 diff --git a/pomme-client/src/harness/script.rs b/pomme-client/src/harness/script.rs
-index cf19404..7e4a209 100644
+index f56cf84..de37389 100644
 --- a/pomme-client/src/harness/script.rs
 +++ b/pomme-client/src/harness/script.rs
 @@ -3,7 +3,8 @@
@@ -1631,7 +1631,7 @@ index cf19404..7e4a209 100644
  
  use serde::{Deserialize, Serialize};
  
-@@ -590,7 +591,7 @@ pub struct Script {
+@@ -592,7 +593,7 @@ pub struct Script {
  impl Script {
      pub fn load(path: &Path, out_dir: Option<PathBuf>) -> Result<Self, String> {
          let source =
@@ -1640,7 +1640,7 @@ index cf19404..7e4a209 100644
          let (steps, deterministic) =
              parse(&source).map_err(|e| format!("{}: {e}", path.display()))?;
          let name = path
-@@ -796,9 +797,9 @@ impl Script {
+@@ -798,9 +799,9 @@ impl Script {
              passed,
              steps: &self.reports,
          };
@@ -2574,7 +2574,7 @@ index cde11d7..5327091 100644
      }
  }
 diff --git a/pomme-client/src/net/mod.rs b/pomme-client/src/net/mod.rs
-index 8ba1fc2..9ddda8d 100644
+index 7bb0f5f..025d86c 100644
 --- a/pomme-client/src/net/mod.rs
 +++ b/pomme-client/src/net/mod.rs
 @@ -2,6 +2,8 @@ pub mod address;
@@ -2786,7 +2786,7 @@ index af87ae4..dc9e2d4 100644
          return vec![("-".into(), fix)];
      };
 diff --git a/pomme-client/src/physics/movement.rs b/pomme-client/src/physics/movement.rs
-index 2d23b59..1c1e28a 100644
+index 0abb64f..c3505b3 100644
 --- a/pomme-client/src/physics/movement.rs
 +++ b/pomme-client/src/physics/movement.rs
 @@ -731,7 +731,12 @@ fn apply_collision(
@@ -2813,10 +2813,10 @@ index 2d23b59..1c1e28a 100644
          SPRINT_AIR_ACCELERATION
      } else {
 diff --git a/pomme-client/src/player/interaction.rs b/pomme-client/src/player/interaction.rs
-index 12b5ede..007bcf0 100644
+index 53d9f4c..ff2e3d8 100644
 --- a/pomme-client/src/player/interaction.rs
 +++ b/pomme-client/src/player/interaction.rs
-@@ -660,6 +660,17 @@ impl InteractionState {
+@@ -666,6 +666,17 @@ impl InteractionState {
          self.item_cooldowns.tick();
      }
  
@@ -2835,10 +2835,10 @@ index 12b5ede..007bcf0 100644
      /// partial tick).
      pub fn attack_strength_scale(&self, delay: f32) -> f32 {
 diff --git a/pomme-client/src/player/mod.rs b/pomme-client/src/player/mod.rs
-index d7caedd..08750b0 100644
+index b923f7d..6f166da 100644
 --- a/pomme-client/src/player/mod.rs
 +++ b/pomme-client/src/player/mod.rs
-@@ -303,6 +303,12 @@ pub struct LocalPlayer {
+@@ -329,6 +329,12 @@ pub struct LocalPlayer {
      /// Vanilla `onUpdateAbilities`: a locally toggled `flying` still has to be
      /// reported to the server via `ServerboundPlayerAbilities`.
      pub abilities_dirty: bool,
@@ -2851,7 +2851,7 @@ index d7caedd..08750b0 100644
      pub eye_height: f32,
      pub prev_eye_height: f32,
      pub walk_dist: f32,
-@@ -458,6 +464,8 @@ impl LocalPlayer {
+@@ -484,6 +490,8 @@ impl LocalPlayer {
              jump_riding_ticks: 0,
              jump_riding_scale: 0.0,
              abilities_dirty: false,
@@ -3106,7 +3106,7 @@ index c49e24b..352d531 100644
  
  /// Run mesh workers below normal priority so the OS preempts them for the
 diff --git a/pomme-client/src/renderer/chunk/occlusion_graph.rs b/pomme-client/src/renderer/chunk/occlusion_graph.rs
-index 3f385d9..6f91fc5 100644
+index eb53391..cae7aba 100644
 --- a/pomme-client/src/renderer/chunk/occlusion_graph.rs
 +++ b/pomme-client/src/renderer/chunk/occlusion_graph.rs
 @@ -593,6 +593,7 @@ enum Message {
@@ -3341,7 +3341,7 @@ index fda0156..5b32a12 100644
  
      /// A column of four sections, the lowest stone, lit `light` if any.
 diff --git a/pomme-client/src/renderer/mod.rs b/pomme-client/src/renderer/mod.rs
-index 80aa716..1baa7c9 100644
+index 1e43313..7135ea9 100644
 --- a/pomme-client/src/renderer/mod.rs
 +++ b/pomme-client/src/renderer/mod.rs
 @@ -112,48 +112,57 @@ pub enum RendererError {
@@ -3440,7 +3440,7 @@ index 80aa716..1baa7c9 100644
              centered: true,
          },
      ]
-@@ -365,7 +374,7 @@ const LOADING_SHARE: f32 = 0.5;
+@@ -368,7 +377,7 @@ const LOADING_SHARE: f32 = 0.5;
  /// window hang.
  pub struct RendererBoot {
      screen: boot::BootScreen,
@@ -3449,7 +3449,7 @@ index 80aa716..1baa7c9 100644
      model_inputs: Arc<crate::world::block::model::ModelInputs>,
      progress: Arc<LoadProgress>,
      /// The bar as drawn, eased towards `progress` each frame.
-@@ -420,7 +429,7 @@ impl Renderer {
+@@ -423,7 +432,7 @@ impl Renderer {
              let model_inputs = Arc::clone(&model_inputs);
              let cache_dir = cache_dir.to_path_buf();
              let progress = Arc::clone(&progress);
@@ -3458,7 +3458,7 @@ index 80aa716..1baa7c9 100644
                  let render_assets = BlockRenderAssets::load(
                      &model_inputs,
                      Some(&cache_dir),
-@@ -690,6 +699,8 @@ impl Renderer {
+@@ -701,6 +710,8 @@ impl Renderer {
          status: &str,
      ) -> Result<(), RendererError> {
          let elements = splash_elements(sw, sh, progress, status);
@@ -3467,7 +3467,7 @@ index 80aa716..1baa7c9 100644
  
          frames.wait(&ctx.device)?;
          let Ok(rhi::Acquired::Image {
-@@ -702,7 +713,7 @@ impl Renderer {
+@@ -713,7 +724,7 @@ impl Renderer {
  
          let mut pass = encoder.begin_render_pass(
              &ctx.device,
@@ -3476,7 +3476,7 @@ index 80aa716..1baa7c9 100644
          );
          let empty_uvs: HashMap<String, [f32; 4]> = HashMap::new();
          let frame = frames.index();
-@@ -770,7 +781,7 @@ impl Renderer {
+@@ -781,7 +792,7 @@ impl Renderer {
          if self.suspended || self.swapchain_dirty || !self.swapchain.is_fifo() {
              return;
          }
@@ -3485,7 +3485,7 @@ index 80aa716..1baa7c9 100644
          self.swapchain_dirty |= !self
              .frames
              .pace(&self.ctx, &self.swapchain, PACE_TIMEOUT_NS);
-@@ -1407,6 +1418,18 @@ impl Renderer {
+@@ -1421,6 +1432,18 @@ impl Renderer {
          self.camera.fov_degrees()
      }
  
@@ -3504,7 +3504,7 @@ index 80aa716..1baa7c9 100644
      pub fn camera_pivot_position(&self) -> Position {
          self.camera.position
      }
-@@ -1992,7 +2015,7 @@ impl Renderer {
+@@ -2013,7 +2036,7 @@ impl Renderer {
          &mut self,
          user: &crate::user::UserData,
          resources: &dyn ResourceManager,
@@ -3513,7 +3513,7 @@ index 80aa716..1baa7c9 100644
      ) {
          self.default_skin = crate::player::default_skin::index(&user.uuid);
          self.pending_skin = None;
-@@ -2244,7 +2267,7 @@ impl Renderer {
+@@ -2290,7 +2313,7 @@ impl Renderer {
  
          let frame = self.frames.index();
  
@@ -3522,7 +3522,7 @@ index 80aa716..1baa7c9 100644
          self.frames.wait(&self.ctx.device)?;
          let fence_ms = t_fence.elapsed().as_secs_f32() * 1000.0;
          self.last_timings.gpu = self
-@@ -2261,7 +2284,7 @@ impl Renderer {
+@@ -2307,7 +2330,7 @@ impl Renderer {
          }
          self.screenshot.collect_ready(frame, &self.ctx.device);
  
@@ -3531,7 +3531,7 @@ index 80aa716..1baa7c9 100644
          let (image_index, suboptimal) =
              match self.frames.acquire(&self.ctx.device, &self.swapchain)? {
                  rhi::Acquired::Image { index, suboptimal } => (index, suboptimal),
-@@ -2517,7 +2540,7 @@ impl Renderer {
+@@ -2564,7 +2587,7 @@ impl Renderer {
              self.gui_item_atlas.end_bake_pass(&encoder, bake);
          }
  
@@ -3540,7 +3540,7 @@ index 80aa716..1baa7c9 100644
          if let RenderMode::World {
              particles,
              nameplates,
-@@ -2613,7 +2636,7 @@ impl Renderer {
+@@ -2664,7 +2687,7 @@ impl Renderer {
                          );
                      }
                      self.gpu_stamp(&encoder, frame, "sky");
@@ -3549,7 +3549,7 @@ index 80aa716..1baa7c9 100644
                      // A pack that failed to build leaves its vertex format until
                      // the next frame remeshes; skip those.
                      let vanilla_terrain = self.chunk_buffers.format() == TerrainFormat::Vanilla;
-@@ -3035,7 +3058,7 @@ impl Renderer {
+@@ -3088,7 +3111,7 @@ impl Renderer {
  
          self.gui_item_atlas.end_frame();
  
@@ -6340,7 +6340,7 @@ index df74e61..8dcfeee 100644
  use winit::keyboard::KeyCode;
  
 diff --git a/pomme-client/src/ui/spectator_menu.rs b/pomme-client/src/ui/spectator_menu.rs
-index 39f96e9..e054972 100644
+index 74d307a..9017fbd 100644
 --- a/pomme-client/src/ui/spectator_menu.rs
 +++ b/pomme-client/src/ui/spectator_menu.rs
 @@ -2,7 +2,7 @@
@@ -6745,7 +6745,7 @@ index d7a9060..d7bb4e3 100644
      }
  }
 diff --git a/pomme-client/src/util.rs b/pomme-client/src/util.rs
-index cd3bb31..78459d6 100644
+index 6d4c493..4816ed9 100644
 --- a/pomme-client/src/util.rs
 +++ b/pomme-client/src/util.rs
 @@ -1,6 +1,6 @@
@@ -6756,7 +6756,7 @@ index cd3bb31..78459d6 100644
  use std::io::{self, Write};
  use std::path::{Path, PathBuf};
  
-@@ -38,8 +38,8 @@ impl JavaRandom {
+@@ -54,8 +54,8 @@ impl JavaRandom {
      /// A time-seeded instance, for vanilla's unseeded `RandomSource.create()`
      /// uses where the exact sequence doesn't matter.
      pub fn from_time() -> Self {
@@ -6767,7 +6767,7 @@ index cd3bb31..78459d6 100644
              .map(|d| d.subsec_nanos() as i64 + d.as_secs() as i64)
              .unwrap_or(0);
          Self::new(nanos)
-@@ -90,6 +90,10 @@ impl JavaRandom {
+@@ -106,6 +106,10 @@ impl JavaRandom {
  /// that waits on the disk: cold file opens wait on it and the virus scanner,
  /// not the CPU.
  pub fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
@@ -6778,7 +6778,7 @@ index cd3bb31..78459d6 100644
      let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(16));
      let chunk = items.len().div_ceil(threads).max(1);
      let f = &f;
-@@ -114,7 +118,11 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+@@ -130,7 +134,11 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
      // Per-process name so two clients on one game dir don't truncate each
      // other's in-flight temp file.
      let mut tmp = target.as_os_str().to_owned();
@@ -6790,7 +6790,7 @@ index cd3bb31..78459d6 100644
      let tmp = PathBuf::from(tmp);
      let result = fs::File::create(&tmp)
          .and_then(|mut file| file.write_all(bytes))
-@@ -141,25 +149,48 @@ pub fn try_recv_live<T>(rx: &crossbeam_channel::Receiver<T>, gone: &str) -> Opti
+@@ -157,25 +165,48 @@ pub fn try_recv_live<T>(rx: &crossbeam_channel::Receiver<T>, gone: &str) -> Opti
  #[cfg(target_os = "android")]
  pub static ANDROID_APP: std::sync::RwLock<Option<crate::AndroidApp>> = std::sync::RwLock::new(None);
  
@@ -6886,10 +6886,10 @@ index 842ce9e..1bd90c9 100644
      }
  }
 diff --git a/pomme-client/src/world/block/model.rs b/pomme-client/src/world/block/model.rs
-index 1f8845e..983756d 100644
+index 7db461b..29a71ef 100644
 --- a/pomme-client/src/world/block/model.rs
 +++ b/pomme-client/src/world/block/model.rs
-@@ -3314,14 +3314,14 @@ mod tests {
+@@ -3365,14 +3365,14 @@ mod tests {
          let jar = root.join("jar/assets");
          let items = jar.join("minecraft/items");
          let models = jar.join("minecraft/models/item");
@@ -6908,7 +6908,7 @@ index 1f8845e..983756d 100644
              models.join("holey.json"),
              r#"{
                  "parent":"minecraft:item/generated",
-@@ -3332,12 +3332,12 @@ mod tests {
+@@ -3383,12 +3383,12 @@ mod tests {
              }"#,
          )
          .unwrap();
@@ -6923,7 +6923,7 @@ index 1f8845e..983756d 100644
              models.join("unresolved.json"),
              r##"{
                  "parent":"minecraft:item/generated",
-@@ -3349,7 +3349,7 @@ mod tests {
+@@ -3400,7 +3400,7 @@ mod tests {
              }"##,
          )
          .unwrap();
@@ -6932,7 +6932,7 @@ index 1f8845e..983756d 100644
  
          let resources = crate::test_util::test_resources(&[root.join("jar")]);
          let inputs = ModelInputs::prepare(&resources).unwrap();
-@@ -3374,20 +3374,20 @@ mod tests {
+@@ -3425,20 +3425,20 @@ mod tests {
              )
          );
  
@@ -6957,7 +6957,7 @@ index 1f8845e..983756d 100644
              models.join("parent.json"),
              r#"{"gui_light":"front","display":{"gui":{"rotation":[30,135,0],"scale":[0.625,0.625,0.625]}}}"#,
          )
-@@ -3400,7 +3400,7 @@ mod tests {
+@@ -3451,7 +3451,7 @@ mod tests {
          assert_eq!(resolved.gui_transform, gui_transform(135.0));
          assert_eq!(resolved.gui_light, GuiLight::Front);
  
@@ -6966,7 +6966,7 @@ index 1f8845e..983756d 100644
      }
  
      #[test]
-@@ -3412,42 +3412,42 @@ mod tests {
+@@ -3463,42 +3463,42 @@ mod tests {
          let models = jar.join("minecraft/models/item");
          let pack_items = instance.join("resourcepacks/test_pack/assets/minecraft/items");
          let pack_models = instance.join("resourcepacks/test_pack/assets/other/models/item");
@@ -7020,7 +7020,7 @@ index 1f8845e..983756d 100644
              pack_items.join("pack_only.json"),
              r#"{"model":{"type":"minecraft:model","model":"other:item/replacement"}}"#,
          )
-@@ -3479,15 +3479,15 @@ mod tests {
+@@ -3530,15 +3530,15 @@ mod tests {
          let origin = transform.transform_point3(Vec3::ZERO);
          assert!((origin - Vec3::new(0.0, 2.0 / 16.0, 0.0)).length() < 1.0e-6);
  
@@ -7039,7 +7039,7 @@ index 1f8845e..983756d 100644
              models.join("test_core.json"),
              r#"{
                  "textures":{"all":"block/test_core"},
-@@ -3516,7 +3516,7 @@ mod tests {
+@@ -3567,7 +3567,7 @@ mod tests {
                  .all(|quad| quad.texture.name() == "test_core")
          );
  
