@@ -1,63 +1,95 @@
+<div align="center">
+
 # PommeWeb
 
-The browser port of [Pomme](https://github.com/PommeMC/Client), the Rust
-Minecraft client: everything that lets it run in a web browser on WebGPU.
-This repo holds only the web code; it builds against a Pomme checkout.
+**[Pomme](https://github.com/PommeMC/Client), the Rust Minecraft client, running in your browser.**
+
+![WebGPU](https://img.shields.io/badge/graphics-WebGPU-005A9C?style=flat-square)
+![WebAssembly](https://img.shields.io/badge/runs%20on-WebAssembly-654FF0?style=flat-square&logo=webassembly&logoColor=white)
+![Rust](https://img.shields.io/badge/written%20in-Rust-B7410E?style=flat-square&logo=rust&logoColor=white)
+![Status](https://img.shields.io/badge/status-in%20progress-d29922?style=flat-square)
+![License](https://img.shields.io/badge/license-GPL--3.0-2ea043?style=flat-square)
+
+</div>
+
+<br>
 
 ![Port progress](docs/progress.svg)
 
-**Status:** in progress. The game does not run in a browser yet. Shaders,
-server connections, audio and the task runtime are ported; the WebGPU
-graphics backend is being written, and the loading screen and title menu are
-the first goal.
+> [!NOTE]
+> **The game doesn't run in a browser yet.** Shaders, server connections,
+> audio and the task runtime are ported. The WebGPU graphics backend is being
+> written now; the loading screen and title menu are the first milestone.
 
-## What's here
+## Roadmap
 
-- [`web/`](web) — JavaScript the page runs: [`webgpu.mjs`](web/webgpu.mjs)
-  (graphics), [`transport.mjs`](web/transport.mjs) (server connections
-  through the relay), [`audio.mjs`](web/audio.mjs) (Web Audio),
-  [`asset-storage.mjs`](web/asset-storage.mjs) (game files in IndexedDB), and
-  the page, [`index.html`](web/index.html).
-- [`rust/`](rust) — the new browser-only Rust files, at the paths they take in
-  Pomme: the shader converter, the WebGPU backend, the relay connection, Web
-  Audio, console logging, the browser task runtime, and the installer's
-  browser storage.
-- [`patches/pomme.patch`](patches/pomme.patch) — the port's edits to Pomme's
-  own files (mostly `cfg(target_arch = "wasm32")` switches), against the
-  Pomme commit in [`patches/BASE`](patches/BASE).
-- [`docs/`](docs) — the progress map and its data.
+- [x] Shaders converted to WGSL at build time — all 74 accepted by Chrome
+- [x] Server connections through `pomme-relay` over WebSocket
+- [x] Web Audio playback
+- [x] Browser task runtime and console logging
+- [ ] WebGPU graphics backend
+- [ ] Browser entry point and game files loaded over the network
+- [ ] **Milestone 1:** loading screen and title menu
+- [ ] Server list and joining a server
+- [ ] **Milestone 2:** world rendering and gameplay
+- [ ] Microsoft account sign-in
 
-Almost all of the game (menus, world rendering, protocol, physics) is Pomme's
-own Rust, compiled to WebAssembly unchanged. Only the places it touches the
-operating system get a browser version:
+## How it works
 
-| The game needs | Desktop | Browser |
+Almost all of the game — menus, world rendering, protocol, physics — is
+Pomme's own Rust, compiled to WebAssembly unchanged. Only the places where the
+game touches the operating system get a browser version:
+
+| The game needs | On desktop | In the browser |
 |---|---|---|
-| Graphics | Vulkan | WebGPU |
-| Shaders | SPIR-V | WGSL, converted at build time |
-| Server connections | TCP | WebSocket to `pomme-relay`, which dials the server |
-| Sound | OpenAL | Web Audio |
-| Background tasks | Tokio | the page's event loop |
-| Game files | disk | IndexedDB |
-| Logs | log file | browser console |
+| 🎨 Graphics | Vulkan | WebGPU |
+| ✨ Shaders | SPIR-V | WGSL, converted at build time |
+| 🌐 Server connections | TCP sockets | WebSocket to `pomme-relay`, which dials the server |
+| 🔊 Sound | OpenAL | Web Audio |
+| ⚙️ Background tasks | Tokio | the page's event loop |
+| 📦 Game files | disk | IndexedDB |
+| 📝 Logs | log file | browser console |
+
+## What's in this repo
+
+This repo holds only the web code; it builds against a Pomme checkout.
+
+| Path | Contents |
+|---|---|
+| [`web/`](web) | JavaScript the page runs — [`webgpu.mjs`](web/webgpu.mjs) (graphics), [`transport.mjs`](web/transport.mjs) (server connections), [`audio.mjs`](web/audio.mjs) (sound), [`asset-storage.mjs`](web/asset-storage.mjs) (game files) — and the page, [`index.html`](web/index.html) |
+| [`rust/`](rust) | New browser-only Rust files, at the paths they take in Pomme |
+| [`patches/pomme.patch`](patches/pomme.patch) | The port's edits to Pomme's own files, against the commit in [`patches/BASE`](patches/BASE) |
+| [`docs/`](docs) | The progress map and its data |
 
 ## Build and run
 
-Needs a Pomme checkout at commit `patches/BASE`, the pinned Rust nightly with
-the `wasm32-unknown-unknown` target, and `wasm-bindgen` 0.2.121
-(`cargo install wasm-bindgen-cli --version 0.2.121`).
+You need a Pomme checkout at the commit in `patches/BASE`, the pinned Rust
+nightly with the `wasm32-unknown-unknown` target, and `wasm-bindgen` 0.2.121:
 
-    cp -R rust/. /path/to/pomme/
-    git -C /path/to/pomme apply "$PWD/patches/pomme.patch"
-    POMME_REPO=/path/to/pomme ./build.sh
-    cd /path/to/pomme && cargo run -p pomme-relay -- --dir /path/to/PommeWeb/dist
+```sh
+cargo install wasm-bindgen-cli --version 0.2.121
+```
 
-Then open http://127.0.0.1:8080 in a browser with WebGPU (Chrome or Edge).
+Then:
 
-`sync.sh` copies the Rust side back out of a working Pomme checkout, and
-`python3 docs/progress.py` redraws the progress map from
-[`docs/progress.json`](docs/progress.json).
+```sh
+cp -R rust/. /path/to/pomme/
+git -C /path/to/pomme apply "$PWD/patches/pomme.patch"
+POMME_REPO=/path/to/pomme ./build.sh
+cd /path/to/pomme && cargo run -p pomme-relay -- --dir /path/to/PommeWeb/dist
+```
+
+and open **http://127.0.0.1:8080** in a browser with WebGPU (Chrome or Edge).
+
+<details>
+<summary>Working on the port</summary>
+
+- `sync.sh` copies the Rust side back out of a working Pomme checkout.
+- `python3 docs/progress.py` redraws the progress map from
+  [`docs/progress.json`](docs/progress.json).
+
+</details>
 
 ## License
 
-GPL-3.0-or-later, as Pomme is.
+GPL-3.0-or-later, as Pomme is. See [LICENSE](LICENSE).
