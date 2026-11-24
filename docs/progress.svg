@@ -7,7 +7,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 .note { font-size: 13px; fill: #8b949e; }
 </style>
 <rect width="100%" height="100%" fill="#0d1117"/>
-<text x="24" y="40" class="title">Pomme web port: 91.05%</text>
+<text x="24" y="40" class="title">Pomme web port: 81.96%</text>
 <text x="24" y="92" class="group">Graphics (WebGPU): 96.00% (168/175)</text>
 <rect x="24.0" y="104.0" width="487.1" height="330.0" fill="#6e7681"/>
 <rect x="24.0" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
@@ -369,38 +369,43 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <rect x="1121.1" y="586.0" width="54.9" height="150.0" fill="#2ea043"/>
 <rect x="1121.1" y="586.0" width="54.9" height="150.0" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="1127.1" y="603.0" class="item">Public Railway deployment</text>
-<text x="24" y="776" class="group">Game: 100.00% (8/8)</text>
-<rect x="24.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="24.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="24.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="30.0" y="805.0" class="item">Loading screen</text>
-<rect x="168.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="168.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="168.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="174.0" y="805.0" class="item">Title menu</text>
-<rect x="312.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="312.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="312.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="318.0" y="805.0" class="item">Server list</text>
-<rect x="456.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="456.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="456.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="462.0" y="805.0" class="item">Joining a server</text>
-<rect x="600.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="600.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="600.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="606.0" y="805.0" class="item">World rendering</text>
-<rect x="744.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="744.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="744.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="750.0" y="805.0" class="item">Local singleplayer</text>
-<rect x="888.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="888.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="888.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="894.0" y="805.0" class="item">PommeWeb links and credits</text>
-<rect x="1032.0" y="788.0" width="144.0" height="120.0" fill="#6e7681"/>
-<rect x="1032.0" y="788.0" width="144.0" height="120.0" fill="#2ea043"/>
-<rect x="1032.0" y="788.0" width="144.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
-<text x="1038.0" y="805.0" class="item">Optional FPS and coordinates HUD</text>
+<text x="24" y="776" class="group">Game: 72.73% (8/11)</text>
+<rect x="24.0" y="788.0" width="314.2" height="120.0" fill="#6e7681"/>
+<line x1="128.7" y1="788.0" x2="128.7" y2="908.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="233.5" y1="788.0" x2="233.5" y2="908.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="24.0" y="788.0" width="314.2" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="30.0" y="805.0" class="item">Advancements screen (registry, browser, vanilla tree)</text>
+<rect x="338.2" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="338.2" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="338.2" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="344.2" y="805.0" class="item">Loading screen</text>
+<rect x="442.9" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="442.9" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="442.9" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="448.9" y="805.0" class="item">Title menu</text>
+<rect x="547.6" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="547.6" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="547.6" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="553.6" y="805.0" class="item">Server list</text>
+<rect x="652.4" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="652.4" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="652.4" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="658.4" y="805.0" class="item">Joining a server</text>
+<rect x="757.1" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="757.1" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="757.1" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="763.1" y="805.0" class="item">World rendering</text>
+<rect x="861.8" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="861.8" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="861.8" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="867.8" y="805.0" class="item">Local singleplayer</text>
+<rect x="966.5" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="966.5" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="966.5" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="972.5" y="805.0" class="item">PommeWeb links and credits</text>
+<rect x="1071.3" y="788.0" width="104.7" height="120.0" fill="#6e7681"/>
+<rect x="1071.3" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
+<rect x="1071.3" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1077.3" y="805.0" class="item">Optional FPS and coordinates HUD</text>
 <text x="24" y="942" class="note">Each square is one piece of the port; green ones work in a browser.</text>
 </svg>

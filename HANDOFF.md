@@ -146,6 +146,13 @@ Working in Chrome:
   gameplay in Chrome. Save and Quit, a page reload, and Play Selected World
   reopened the same world ID in Chrome.
 
+The client now has an Advancements list (pause menu or **L**) that displays
+the connected server’s visible advancements and criterion progress. Native and
+wasm builds passed; a focused store test covered completion, hidden entries,
+toast creation, and removal. The first Chrome smoke run reached a newly created
+local world, but was still on the terrain-loading screen at the scheduled
+Advancements screenshot. The vanilla tree and Statistics are not implemented.
+
 Not done, in suggested order:
 
 1. **Fast chunk loading.** Meshing is ~6 ms per column on one thread.

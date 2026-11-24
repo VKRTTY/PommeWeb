@@ -189,6 +189,11 @@
           "name": "Optional FPS and coordinates HUD",
           "total": 1,
           "done": 1
+        },
+        {
+          "name": "Advancements screen (registry, browser, vanilla tree)",
+          "total": 3,
+          "done": 0
         }
       ]
     }
