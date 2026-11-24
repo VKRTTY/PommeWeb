@@ -136,6 +136,35 @@ pub fn tick(meteor: &mut MeteorClient, input: &InputState, game: &mut GameState,
         }
     }
 
+    // FastUse and BreakDelay: their cooldowns, as Meteor sets them each tick.
+    let fast_use = meteor.is_active("fast-use").then(|| meteor.get_f64("fast-use", "cooldown") as u32);
+    let break_delay = meteor.is_active("break-delay").then(|| meteor.get_f64("break-delay", "cooldown") as u32);
+    if fast_use.is_some() || break_delay.is_some() {
+        game.interaction.cap_delays(fast_use, break_delay);
+    }
+
+    // Parkour: jumps at the edge of a block.
+    if meteor.is_active("parkour")
+        && game.player.on_ground
+        && !input.performing_action(Action::Jump)
+        && !input.action_held(Action::Sneak)
+    {
+        let edge = meteor.get_f64("parkour", "edge-distance");
+        let reach = 0.3 - edge;
+        let p = game.player.position;
+        let solid_at = |x: f64, z: f64| {
+            let state = game.chunk_store.get_block_state(x.floor() as i32, (p.y - 0.5).floor() as i32, z.floor() as i32);
+            let id = game.block_registry.block_state_data(state).id();
+            !id.ends_with("air")
+        };
+        let supported = [(-reach, -reach), (reach, -reach), (-reach, reach), (reach, reach)]
+            .into_iter()
+            .any(|(dx, dz)| solid_at(p.x + dx, p.z + dz));
+        if !supported {
+            game.player.velocity.y = 0.42;
+        }
+    }
+
     // AutoRespawn.
     if meteor.is_active("auto-respawn") && game.dead && game.death_screen_open {
         sender.send(GamePacket::ClientCommand(ClientCommand::PerformRespawn));

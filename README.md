@@ -84,7 +84,7 @@ Press **Right Shift** in a world, or use **Meteor Client** on the pause menu.
   (smoothing, scroll, cinematic), Sprint, Auto Walk, Auto Jump, Step, Reach,
   Velocity, Jesus, Fast Climb, Flight, High Jump, No Fall, Speed, Spider, Air
   Jump, Long Jump, Anti Void, Auto Clicker, Anti AFK, Auto Respawn, Notifier,
-  Kill Aura and Timer (24 of 169). The rest keep their settings but don't act
+  Kill Aura, Timer, Fast Use, Break Delay and Parkour (27 of 169). The rest keep their settings but don't act
   yet; the full status is in [HANDOFF.md](HANDOFF.md).
 
 ## How it works

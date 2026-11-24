@@ -86,7 +86,7 @@ pub const PORTED: &[&str] = &[
     "fullbright", "zoom", "sprint", "auto-walk", "auto-jump", "step", "reach", "velocity",
     "jesus", "fast-climb", "flight", "high-jump", "no-fall", "speed", "spider", "air-jump",
     "long-jump", "anti-void", "auto-clicker", "anti-afk", "auto-respawn", "notifier", "kill-aura",
-    "timer",
+    "timer", "fast-use", "break-delay", "parkour",
 ];
 
 /// One module's state.

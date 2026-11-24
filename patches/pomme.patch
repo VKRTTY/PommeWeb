@@ -2684,6 +2684,28 @@ index af87ae4..dc9e2d4 100644
          let fix = format!("no fixture; run `just wire-fixtures {}`", version.name);
          return vec![("-".into(), fix)];
      };
+diff --git a/pomme-client/src/player/interaction.rs b/pomme-client/src/player/interaction.rs
+index 12b5ede..007bcf0 100644
+--- a/pomme-client/src/player/interaction.rs
++++ b/pomme-client/src/player/interaction.rs
+@@ -660,6 +660,17 @@ impl InteractionState {
+         self.item_cooldowns.tick();
+     }
+ 
++    /// Meteor's FastUse and BreakDelay: the item-use and block-break
++    /// cooldowns held down to at most the given ticks.
++    pub fn cap_delays(&mut self, use_delay: Option<u32>, destroy_delay: Option<u32>) {
++        if let Some(d) = use_delay {
++            self.use_delay = self.use_delay.min(d);
++        }
++        if let Some(d) = destroy_delay {
++            self.destroy_delay = self.destroy_delay.min(d);
++        }
++    }
++
+     /// Vanilla `Player.getAttackStrengthScale(0.0)` (the HUD passes no
+     /// partial tick).
+     pub fn attack_strength_scale(&self, delay: f32) -> f32 {
 diff --git a/pomme-client/src/renderer/chunk/atlas.rs b/pomme-client/src/renderer/chunk/atlas.rs
 index 01c667e..9532f23 100644
 --- a/pomme-client/src/renderer/chunk/atlas.rs
