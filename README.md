@@ -171,7 +171,7 @@ pass `--local-worlds /path/to/world-saves` after Cargo's `--`. Neither
 
 ## Railway
 
-**[Open PommeWeb on Railway](https://mcweb-production-20e8ff9d.up.railway.app/).**
+**[Open PommeWeb on Railway](https://webmc.up.railway.app/).**
 
 Deploy this repository as a Dockerfile service. Railway supplies the public
 domain and port; the container serves the built browser client and relay.
@@ -179,9 +179,7 @@ The hosted relay only connects to public game servers. Local singleplayer
 continues to use `./play.sh` on your own machine.
 
 The GitHub Actions workflow deploys pushes to `main`. Configure a project-scoped
-Railway token as the repository Actions secret `RAILWAY_TOKEN`, and add
-`RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`, and `RAILWAY_SERVICE_ID` as
-repository Actions variables.
+Railway token as the repository Actions secret `RAILWAY_TOKEN`.
 
 ## License
 

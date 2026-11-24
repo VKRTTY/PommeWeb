@@ -4,6 +4,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - Dockerfile
+      - build.sh
+      - railway-start.sh
+      - rust/**
+      - patches/**
+      - web/**
   workflow_dispatch:
 
 permissions:
@@ -17,20 +24,18 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      RAILWAY_PROJECT_ID: 587ad760-e790-4588-a5d3-2d6e3c61a568
+      RAILWAY_ENVIRONMENT_ID: 315a4e03-4d1b-4355-ae32-ffe5f7579e63
+      RAILWAY_SERVICE_ID: 5f84d463-7b1d-4448-b94e-f830364a3ea6
     steps:
       - uses: actions/checkout@v4
 
       - name: Validate Railway configuration
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
-          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
         run: |
           test -n "$RAILWAY_TOKEN" || { echo "Missing Actions secret: RAILWAY_TOKEN"; exit 1; }
-          test -n "$RAILWAY_PROJECT_ID" || { echo "Missing Actions variable: RAILWAY_PROJECT_ID"; exit 1; }
-          test -n "$RAILWAY_ENVIRONMENT_ID" || { echo "Missing Actions variable: RAILWAY_ENVIRONMENT_ID"; exit 1; }
-          test -n "$RAILWAY_SERVICE_ID" || { echo "Missing Actions variable: RAILWAY_SERVICE_ID"; exit 1; }
 
       - name: Install Railway CLI
         run: npm install --global @railway/cli
@@ -38,9 +43,6 @@ jobs:
       - name: Build and deploy
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ vars.RAILWAY_PROJECT_ID }}
-          RAILWAY_ENVIRONMENT_ID: ${{ vars.RAILWAY_ENVIRONMENT_ID }}
-          RAILWAY_SERVICE_ID: ${{ vars.RAILWAY_SERVICE_ID }}
         run: |
           railway up --ci \
             --project "$RAILWAY_PROJECT_ID" \
