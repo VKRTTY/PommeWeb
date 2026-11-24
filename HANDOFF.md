@@ -168,8 +168,9 @@ Not done, in suggested order:
 2. **Microsoft sign-in.** Use the device-code flow (`pomme_auth::device_code_sign_in`;
    the browser already uses it in `ui/menu/account.rs`). `pomme-auth`'s
    `device_code.rs` still uses `tokio::time` (panics on wasm) and
-   `lib.rs` uses `std::time::SystemTime`; switch both to `web_time` and a
-   browser sleep. Then drop the forced offline `--username Player` in
+   the browser flow needs end-to-end account verification. Browser-compatible
+   clock and polling are wired and the hosted relay can request a device code.
+   Keep guest access unless intentionally changing it; the forced offline `--username Player` in
    `start()` and the `not(wasm32)` in `UserData::for_launch`'s release flag
    (`lib.rs`). Accounts already persist in localStorage (`account.rs` `WebStore`).
 3. **Distant terrain:** needs a worker (see 1), and its 4-group pipelines
