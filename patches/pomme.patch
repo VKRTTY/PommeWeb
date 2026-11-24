@@ -1950,7 +1950,7 @@ index 0745999..e6c8d0b 100644
              compute_layout,
              cull_layout,
 diff --git a/pomme-client/src/renderer/chunk/mesher.rs b/pomme-client/src/renderer/chunk/mesher.rs
-index c49e24b..2ef6427 100644
+index c49e24b..352d531 100644
 --- a/pomme-client/src/renderer/chunk/mesher.rs
 +++ b/pomme-client/src/renderer/chunk/mesher.rs
 @@ -380,9 +380,9 @@ pub struct ChunkMeshData {
@@ -1995,20 +1995,25 @@ index c49e24b..2ef6427 100644
          let mut snapshot = self.build_snapshot(chunk_store, pos);
          let mut mesh = mesh_chunk_snapshot(
              &mut snapshot,
-@@ -1195,6 +1197,12 @@ impl MeshDispatcher {
+@@ -1195,6 +1197,17 @@ impl MeshDispatcher {
      /// earlier ones the caller still has waiting to upload
      /// ([`MAX_PENDING_RESULTS`]).
      pub fn drain_results(&self, held: usize) -> impl Iterator<Item = ChunkMeshData> + '_ {
 +        #[cfg(target_arch = "wasm32")]
-+        self.queue.run_here(
-+            &self.claimed,
-+            MAX_PENDING_RESULTS.saturating_sub(held + self.result_rx.len()),
-+            std::time::Duration::from_millis(8),
-+        );
++        {
++            // A backlog gets more of the frame: the world fills in a few
++            // seconds at a lower frame rate, then frames go back to normal.
++            let backlog = !self.queue.batch.lock().unwrap().exhausted();
++            self.queue.run_here(
++                &self.claimed,
++                MAX_PENDING_RESULTS.saturating_sub(held + self.result_rx.len()),
++                std::time::Duration::from_millis(if backlog { 20 } else { 8 }),
++            );
++        }
          self.priority_rx.try_iter().chain(
              self.result_rx
                  .try_iter()
-@@ -1241,7 +1249,7 @@ struct PendingJob {
+@@ -1241,7 +1254,7 @@ struct PendingJob {
      upload_epoch: u64,
      sections: std::ops::Range<i32>,
      is_recompile: bool,
@@ -2017,7 +2022,7 @@ index c49e24b..2ef6427 100644
      snapshot: Mutex<Option<ChunkStoreSnapshot>>,
      render_view: OwnedBlockRenderView,
      uv_map: Arc<AtlasUVMap>,
-@@ -1259,7 +1267,7 @@ impl PendingJob {
+@@ -1259,7 +1272,7 @@ impl PendingJob {
      }
  
      fn run(&self, mut snapshot: ChunkStoreSnapshot) {
@@ -2026,7 +2031,7 @@ index c49e24b..2ef6427 100644
          let mut mesh = mesh_chunk_snapshot(
              &mut snapshot,
              self.pos,
-@@ -1269,7 +1277,7 @@ impl PendingJob {
+@@ -1269,7 +1282,7 @@ impl PendingJob {
              self.sections.clone(),
              &self.pool,
          );
@@ -2035,7 +2040,7 @@ index c49e24b..2ef6427 100644
          mesh.incarnation = self.incarnation;
          mesh.content_gen = self.content_gen;
          mesh.upload_epoch = self.upload_epoch;
-@@ -1405,31 +1413,51 @@ impl MeshQueue {
+@@ -1405,29 +1418,66 @@ impl MeshQueue {
              while self.published.load(Ordering::Acquire) == seen
                  && let Some(job) = batch.take()
              {
@@ -2060,9 +2065,9 @@ index c49e24b..2ef6427 100644
 -                    tracing::error!("chunk mesh job panicked; worker continuing");
 -                }
 +                run_job(job, claimed);
-+            }
-+        }
-+    }
+             }
+         }
+     }
 +
 +    /// The browser's stand-in for the workers: up to `limit` jobs of the
 +    /// current batch, on the game's thread, for at most `budget`.
@@ -2077,11 +2082,28 @@ index c49e24b..2ef6427 100644
 +        {
 +            if run_job(job, claimed) {
 +                ran += 1;
-             }
-         }
-     }
- }
- 
++            }
++        }
++        if ran > 0 {
++            use std::sync::atomic::AtomicU32;
++            static JOBS: AtomicU32 = AtomicU32::new(0);
++            static MICROS: AtomicU64 = AtomicU64::new(0);
++            static FIRST: std::sync::OnceLock<web_time::Instant> = std::sync::OnceLock::new();
++            let first = *FIRST.get_or_init(|| start);
++            let jobs = JOBS.fetch_add(ran as u32, Ordering::Relaxed) + ran as u32;
++            let micros = MICROS.fetch_add(start.elapsed().as_micros() as u64, Ordering::Relaxed)
++                + start.elapsed().as_micros() as u64;
++            if jobs / 50 != (jobs - ran as u32) / 50 {
++                tracing::info!(
++                    "meshed {jobs} columns in {:.1} s, {:.2} ms each",
++                    first.elapsed().as_secs_f32(),
++                    micros as f64 / 1000.0 / jobs as f64
++                );
++            }
++        }
++    }
++}
++
 +/// Runs `job` if this is the first to claim its generation; whether it ran.
 +fn run_job(job: &Arc<PendingJob>, claimed: &ChunkRing<AtomicU64>) -> bool {
 +    // Each generation meshes once: the first worker to raise the column's
@@ -2102,11 +2124,9 @@ index c49e24b..2ef6427 100644
 +        tracing::error!("chunk mesh job panicked; worker continuing");
 +    }
 +    true
-+}
-+
+ }
+ 
  /// Run mesh workers below normal priority so the OS preempts them for the
- /// main/render thread during a load burst, while they still use idle cores.
- #[cfg(windows)]
 diff --git a/pomme-client/src/renderer/chunk/occlusion_graph.rs b/pomme-client/src/renderer/chunk/occlusion_graph.rs
 index 3f385d9..6f91fc5 100644
 --- a/pomme-client/src/renderer/chunk/occlusion_graph.rs

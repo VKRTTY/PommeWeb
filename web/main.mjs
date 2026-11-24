@@ -150,6 +150,7 @@ try {
   // showing the game's own progress meanwhile.
   globalThis.pommeSplash = (progress, text) => { setProgress(progress); say(text); showTextures(); };
   globalThis.pommeReady = () => {
+    globalThis.pommeIsReady = true;
     loading.classList.add('done');
     clearInterval(lookAgain);
     // The game files are surely in by now, for the next visit's cache.

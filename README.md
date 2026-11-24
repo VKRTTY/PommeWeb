@@ -84,6 +84,18 @@ This repo holds only the web code; it builds against a Pomme checkout.
 | [`patches/pomme.patch`](patches/pomme.patch) | The port's edits to Pomme's own files, against the commit in [`patches/BASE`](patches/BASE) |
 | [`docs/`](docs) | The progress map and its data |
 
+## Play
+
+1. Build it and start the relay (below), then open **http://127.0.0.1:8460**
+   in Chrome or Edge.
+2. The first visit downloads the game files from Mojang (about 50 MB) behind
+   the loading screen; later visits start in seconds.
+3. **Multiplayer → Direct Connection**, enter the server's address, **Join
+   Server**. You play as `Player` for now, so the server must be in offline
+   mode (`online-mode=false`) until Microsoft sign-in comes to the browser.
+4. To play on a server on your own machine, start the relay with
+   `--allow-private-servers`.
+
 ## Build and run
 
 You need a Pomme checkout at the commit in `patches/BASE`, the pinned Rust
@@ -99,10 +111,11 @@ Then:
 cp -R rust/. /path/to/pomme/
 git -C /path/to/pomme apply "$PWD/patches/pomme.patch"
 POMME_REPO=/path/to/pomme ./build.sh
-cd /path/to/pomme && cargo run -p pomme-relay -- --dir /path/to/PommeWeb/dist
+cd /path/to/pomme && cargo run -p pomme-relay --release -- \
+  --dir /path/to/PommeWeb/dist --listen 127.0.0.1:8460 --allow-private-servers
 ```
 
-and open **http://127.0.0.1:8080** in a browser with WebGPU (Chrome or Edge).
+and open **http://127.0.0.1:8460** in a browser with WebGPU (Chrome or Edge).
 
 <details>
 <summary>Working on the port</summary>

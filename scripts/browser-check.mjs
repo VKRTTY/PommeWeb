@@ -86,7 +86,14 @@ if (seconds === '-') {
       console.log(`eval: ${args[0]} => ${JSON.stringify(r.result?.result?.value)}`);
     } else if (what === 'reload') await send('Page.reload', {ignoreCache: false});
     else if (what === 'key') { await key('keyDown', args[0]); await sleep(30); await key('keyUp', args[0]); }
-    else if (what === 'hold') { await key('keyDown', args[0]); await sleep(args[1] * 1000); await key('keyUp', args[0]); }
+    else if (what === 'waitfor') {
+      const end = Date.now() + (args[1] ?? 120) * 1000;
+      while (Date.now() < end) {
+        const r = await send('Runtime.evaluate', {expression: args[0], returnByValue: true});
+        if (r.result?.result?.value) break;
+        await sleep(250);
+      }
+    } else if (what === 'hold') { await key('keyDown', args[0]); await sleep(args[1] * 1000); await key('keyUp', args[0]); }
     else if (what === 'type') for (const c of args[0]) { await key('keyDown', c); await key('keyUp', c); await sleep(20); }
     await sleep(100);
   }
