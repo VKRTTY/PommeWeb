@@ -146,6 +146,8 @@ pass `--local-worlds /path/to/world-saves` after Cargo's `--`. Neither
 
 ## Railway
 
+**[Open PommeWeb on Railway](https://mcweb-production-20e8ff9d.up.railway.app/).**
+
 Deploy this repository as a Dockerfile service. Railway supplies the public
 domain and port; the container serves the built browser client and relay.
 The hosted relay only connects to public game servers. Local singleplayer

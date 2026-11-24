@@ -139,6 +139,11 @@
           "name": "Railway packaging",
           "total": 1,
           "done": 1
+        },
+        {
+          "name": "Public Railway deployment",
+          "total": 1,
+          "done": 1
         }
       ]
     },
