@@ -7,7 +7,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 .note { font-size: 13px; fill: #8b949e; }
 </style>
 <rect width="100%" height="100%" fill="#0d1117"/>
-<text x="24" y="40" class="title">Pomme web port: 66.34%</text>
+<text x="24" y="40" class="title">Pomme web port: 85.03%</text>
 <text x="24" y="92" class="group">Graphics (WebGPU): 96.00% (168/175)</text>
 <rect x="24.0" y="104.0" width="487.1" height="330.0" fill="#6e7681"/>
 <rect x="24.0" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
@@ -278,7 +278,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <line x1="1106.8" y1="402.6" x2="1176.0" y2="402.6" stroke="#0d1117" stroke-opacity="0.35"/>
 <rect x="1106.8" y="371.2" width="69.2" height="62.8" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="1112.8" y="388.2" class="item">Samplers</text>
-<text x="24" y="474" class="group">Platform: 69.70% (23/33)</text>
+<text x="24" y="474" class="group">Platform: 75.76% (25/33)</text>
 <rect x="24.0" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
 <rect x="24.0" y="486.0" width="139.6" height="62.5" fill="#2ea043"/>
 <rect x="24.0" y="548.5" width="139.6" height="62.5" fill="#2ea043"/>
@@ -318,6 +318,8 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <text x="448.9" y="503.0" class="item">Installer</text>
 <rect x="582.5" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
 <rect x="582.5" y="486.0" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="582.5" y="548.5" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="582.5" y="611.0" width="139.6" height="62.5" fill="#2ea043"/>
 <line x1="582.5" y1="548.5" x2="722.2" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
 <line x1="582.5" y1="611.0" x2="722.2" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
 <line x1="582.5" y1="673.5" x2="722.2" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
@@ -359,7 +361,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <rect x="1094.5" y="628.9" width="81.5" height="107.1" fill="#2ea043"/>
 <rect x="1094.5" y="628.9" width="81.5" height="107.1" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="1100.5" y="645.9" class="item">Discord</text>
-<text x="24" y="776" class="group">Game: 33.33% (2/6)</text>
+<text x="24" y="776" class="group">Game: 83.33% (5/6)</text>
 <rect x="24.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
 <rect x="24.0" y="788.0" width="192.0" height="120.0" fill="#2ea043"/>
 <rect x="24.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
@@ -369,12 +371,15 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <rect x="216.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="222.0" y="805.0" class="item">Title menu</text>
 <rect x="408.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="408.0" y="788.0" width="192.0" height="120.0" fill="#2ea043"/>
 <rect x="408.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="414.0" y="805.0" class="item">Server list</text>
 <rect x="600.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="600.0" y="788.0" width="192.0" height="120.0" fill="#2ea043"/>
 <rect x="600.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="606.0" y="805.0" class="item">Joining a server</text>
 <rect x="792.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="792.0" y="788.0" width="192.0" height="120.0" fill="#2ea043"/>
 <rect x="792.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="798.0" y="805.0" class="item">World rendering</text>
 <rect x="984.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>

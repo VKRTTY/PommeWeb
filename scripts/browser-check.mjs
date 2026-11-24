@@ -62,11 +62,14 @@ const capture = async file => {
 if (seconds === '-') {
   const steps = JSON.parse(await fs.readFile(every, 'utf8'));
   await fs.mkdir(shot, {recursive: true});
+  const VK = {Escape: 27, Enter: 13, ' ': 32, Shift: 16, Tab: 9, Backspace: 8};
   const key = async (type, k) => {
-    const code = k.length === 1 ? `Key${k.toUpperCase()}` : k;
-    await send('Input.dispatchKeyEvent', {type, key: k, code,
-      ...(k.length === 1 && type === 'keyDown' ? {text: k} : {}),
-      windowsVirtualKeyCode: k === 'Escape' ? 27 : k === 'Enter' ? 13 : k.toUpperCase().charCodeAt(0)});
+    const fkey = /^F(\d+)$/.exec(k);
+    const code = k === ' ' ? 'Space' : k === '/' ? 'Slash' : /^[a-z]$/i.test(k) ? `Key${k.toUpperCase()}`
+      : /^\d$/.test(k) ? `Digit${k}` : k === '.' ? 'Period' : k === '~' ? 'Backquote' : k;
+    const vk = VK[k] ?? (fkey ? 111 + Number(fkey[1]) : k.toUpperCase().charCodeAt(0));
+    await send('Input.dispatchKeyEvent', {type, key: k, code, windowsVirtualKeyCode: vk,
+      ...(k.length === 1 && type === 'keyDown' ? {text: k} : {})});
   };
   for (const [what, ...args] of steps) {
     if (what === 'wait') await sleep(args[0] * 1000);
@@ -83,6 +86,7 @@ if (seconds === '-') {
       console.log(`eval: ${args[0]} => ${JSON.stringify(r.result?.result?.value)}`);
     } else if (what === 'reload') await send('Page.reload', {ignoreCache: false});
     else if (what === 'key') { await key('keyDown', args[0]); await sleep(30); await key('keyUp', args[0]); }
+    else if (what === 'hold') { await key('keyDown', args[0]); await sleep(args[1] * 1000); await key('keyUp', args[0]); }
     else if (what === 'type') for (const c of args[0]) { await key('keyDown', c); await key('keyUp', c); await sleep(20); }
     await sleep(100);
   }

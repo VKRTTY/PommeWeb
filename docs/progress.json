@@ -98,7 +98,7 @@
         {
           "name": "Threads",
           "total": 4,
-          "done": 1
+          "done": 3
         },
         {
           "name": "Task runtime",
@@ -153,17 +153,17 @@
         {
           "name": "Server list",
           "total": 1,
-          "done": 0
+          "done": 1
         },
         {
           "name": "Joining a server",
           "total": 1,
-          "done": 0
+          "done": 1
         },
         {
           "name": "World rendering",
           "total": 1,
-          "done": 0
+          "done": 1
         },
         {
           "name": "Singleplayer",
