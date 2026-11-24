@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..79d3cc6 100644
+index cfadfa1..5f144b0 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -469,7 +469,7 @@ index cfadfa1..79d3cc6 100644
  
  use glam::{FloatExt, dvec3};
  use pomme_protocol::serverbound::{
-@@ -1015,9 +1015,10 @@ pub struct AppCore {
+@@ -1015,9 +1015,11 @@ pub struct AppCore {
      pub window_size: winit::dpi::LogicalSize<u32>,
      pub input: InputState,
      pub menu: MainMenu,
@@ -478,10 +478,11 @@ index cfadfa1..79d3cc6 100644
      pub data_dirs: DataDirs,
      pub version: String,
 +    pub izu_hud: bool,
++    pub izu_zoom: bool,
      builtin_resources: BuiltinRepositorySource,
      folder_resources: FolderRepositorySource,
      registered_resources: RegisteredRepositorySource,
-@@ -1160,7 +1161,7 @@ impl AppCore {
+@@ -1160,7 +1162,7 @@ impl AppCore {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -490,15 +491,16 @@ index cfadfa1..79d3cc6 100644
          presence: Option<DiscordPresence>,
          user: UserData,
          window_size: winit::dpi::LogicalSize<u32>,
-@@ -1204,6 +1205,7 @@ impl AppCore {
+@@ -1204,6 +1206,8 @@ impl AppCore {
              tokio_rt,
              data_dirs,
              version,
 +            izu_hud: false,
++            izu_zoom: false,
              builtin_resources,
              folder_resources,
              registered_resources,
-@@ -1257,8 +1259,8 @@ impl AppCore {
+@@ -1257,8 +1261,8 @@ impl AppCore {
          self.registered_resources.set_symlink_policy(policy);
  
          let root = self.data_dirs.game_dir.join("resourcepacks");
@@ -509,7 +511,7 @@ index cfadfa1..79d3cc6 100644
          {
              tracing::warn!(path = %root.display(), %error, "Cannot create resource pack directory");
          }
-@@ -2229,7 +2231,7 @@ impl AppCore {
+@@ -2229,7 +2233,7 @@ impl AppCore {
          let rx = &connection.event_rx;
  
          // Phase timers for the chunk-load benchmark's worst-frame breakdown.
@@ -518,7 +520,7 @@ index cfadfa1..79d3cc6 100644
  
          // Block edits go on the priority lane so they apply instantly even while
          // chunks stream in, instead of starving behind the load backlog.
-@@ -2257,7 +2259,7 @@ impl AppCore {
+@@ -2257,7 +2261,7 @@ impl AppCore {
                      | NetworkEvent::LightUpdate { .. }
                      | NetworkEvent::ChunkBiomes { .. }
              )
@@ -527,7 +529,7 @@ index cfadfa1..79d3cc6 100644
              match event {
                  NetworkEvent::ProtocolSelected { protocol } => game.select_protocol(protocol),
                  NetworkEvent::LoggedIn => {
-@@ -3811,14 +3813,14 @@ impl AppCore {
+@@ -3811,14 +3815,14 @@ impl AppCore {
          // New chunk loads mark themselves dirty when their queued light
          // applies (GameState::update_light), which raises this flag.
          let loads_happened = std::mem::take(&mut game.pending_load_rescan);
@@ -545,6 +547,19 @@ index cfadfa1..79d3cc6 100644
          game.rescan_mesh_jobs(self.menu.chunk_detail);
          game.last_update_phases.rescan_ms = ms(t_rescan);
  
+@@ -3963,7 +3967,11 @@ impl AppCore {
+         }
+ 
+         // Vanilla ticks the camera FOV interpolation even while dead.
+-        renderer.set_base_fov(self.menu.fov as f32);
++        renderer.set_base_fov(if self.izu_hud && self.izu_zoom {
++            30.0
++        } else {
++            self.menu.fov as f32
++        });
+         let fov_effect_scale = self.menu.fov_effect();
+         renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
+         // TODO: lava camera fluid (no eyes_in_lava).
 diff --git a/pomme-client/src/app/input/mod.rs b/pomme-client/src/app/input/mod.rs
 index 2073c61..97d0f93 100644
 --- a/pomme-client/src/app/input/mod.rs
@@ -688,7 +703,7 @@ index 51fb7e7..4fcbf6e 100644
  /// Vanilla `CLIENT_WAIT_TIMEOUT_MS`: let the player in regardless after this
  /// long, counted from the login/respawn that started the load.
 diff --git a/pomme-client/src/app/mod.rs b/pomme-client/src/app/mod.rs
-index e9b59ba..2dde703 100644
+index e9b59ba..eabbc68 100644
 --- a/pomme-client/src/app/mod.rs
 +++ b/pomme-client/src/app/mod.rs
 @@ -10,7 +10,8 @@ pub mod state_slot;
@@ -762,7 +777,7 @@ index e9b59ba..2dde703 100644
          // In pixels, as vanilla's `--width` is, so shots are the same size at
          // any display scale.
          let size = core.window_size;
-@@ -908,6 +931,17 @@ impl ApplicationHandler for App {
+@@ -908,6 +931,29 @@ impl ApplicationHandler for App {
                          self.core.input.on_key_event(&event);
                          return app;
                      }
@@ -774,13 +789,25 @@ index e9b59ba..2dde703 100644
 +                    {
 +                        if !event.repeat {
 +                            self.core.izu_hud = !self.core.izu_hud;
++                            self.core.izu_zoom = false;
++                        }
++                        return app;
++                    }
++                    if self.core.izu_hud
++                        && event.state.is_pressed()
++                        && key == Some(winit::keyboard::KeyCode::KeyZ)
++                        && self.core.input.shift_only()
++                        && matches!(&app, AppPhase::InGame { game, .. } if game.input_live())
++                    {
++                        if !event.repeat {
++                            self.core.izu_zoom = !self.core.izu_zoom;
 +                        }
 +                        return app;
 +                    }
                      // F3 held suppresses global keys (vanilla
                      // handleGlobalKeyPress); press only, no repeat.
                      if let Some(Gfx { window, .. }) = app.gfx_mut()
-@@ -1120,6 +1154,13 @@ impl ApplicationHandler for App {
+@@ -1120,6 +1166,13 @@ impl ApplicationHandler for App {
                                      }
                                  } else {
                                      match code {
@@ -794,7 +821,7 @@ index e9b59ba..2dde703 100644
                                          // F3+Esc pauses without opening the
                                          // menu (vanilla pauseGame(true)).
                                          _ if self
-@@ -1522,9 +1563,14 @@ impl ApplicationHandler for App {
+@@ -1522,9 +1575,14 @@ impl ApplicationHandler for App {
                      // Paced here so input arriving during the wait is pumped before the next frame.
                      gfx.renderer.pace_frame();
                  }
@@ -810,7 +837,7 @@ index e9b59ba..2dde703 100644
              _ => {}
          }
 diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
-index a9c5416..450bfa2 100644
+index a9c5416..86044e1 100644
 --- a/pomme-client/src/app/phases/in_game.rs
 +++ b/pomme-client/src/app/phases/in_game.rs
 @@ -1,7 +1,7 @@
@@ -867,7 +894,7 @@ index a9c5416..450bfa2 100644
      // G quick actions, C/X creative saved hotbars, spectator hotbar select.
  
      // Finished F2 captures announce in chat (vanilla screenshot.success: bare
-@@ -3849,6 +3849,25 @@ pub fn update_game(
+@@ -3849,6 +3849,26 @@ pub fn update_game(
  
      // F1 hides the closed-chat overlay; an open chat is a screen and renders
      // regardless (vanilla Hud.extractChat vs ChatScreen).
@@ -884,6 +911,7 @@ index a9c5416..450bfa2 100644
 +        } else {
 +            format!("Izu HUD  |  FPS: {fps}")
 +        };
++        let text = if core.izu_zoom { format!("{text}  |  Zoom") } else { text };
 +        elements.push(MenuElement::Text {
 +            x: 4.0 * gs, y: 4.0 * gs, text,
 +            scale: crate::ui::common::FONT_SIZE * gs, color: [1.0; 4], centered: false,
@@ -893,7 +921,7 @@ index a9c5416..450bfa2 100644
      if !game.hide_gui || game.chat.is_focused() {
          let dialog_open = game.dialog_open();
          let command_tree = game.command_tree.clone();
-@@ -3920,7 +3939,7 @@ pub fn update_game(
+@@ -3920,7 +3940,7 @@ pub fn update_game(
      // Vanilla Hud.extractSubtitleOverlay: drawn last when no screen or an
      // in-game one is open (then even with F1), else here under the screen.
      // The queue is empty while the option is off.
@@ -902,7 +930,21 @@ index a9c5416..450bfa2 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
-@@ -4223,6 +4242,7 @@ pub fn update_game(
+@@ -4172,7 +4192,12 @@ pub fn update_game(
+             .build(sw, sh, &menu_input, &mut core.input.key_bindings, |t, s| {
+                 r.menu_text_width(t, s)
+             });
+-        elements.extend(result.elements);
++        // Keep the world and settings widgets visible on WebGPU without
++        // the in-place blur pass. Title menus and native rendering are unchanged.
++        elements.extend(result.elements.into_iter().filter(|element| {
++            !cfg!(target_arch = "wasm32")
++                || !matches!(element, MenuElement::BlurBackground)
++        }));
+         core.input.clear_just_pressed_actions();
+         core.sync_display_mode(&gfx.window);
+     } else if game.death_screen_open && !dialog_open {
+@@ -4223,6 +4248,7 @@ pub fn update_game(
              game.pause_screen,
              game.server_render_distance,
              game.singleplayer,
@@ -910,7 +952,7 @@ index a9c5416..450bfa2 100644
          );
          core.input.clear_just_pressed_actions();
      }
-@@ -5622,6 +5642,9 @@ pub fn update_game(
+@@ -5622,6 +5648,9 @@ pub fn update_game(
          PauseAction::Disconnect => {
              return GameUpdateResult::ManualDisconnect;
          }
@@ -920,7 +962,7 @@ index a9c5416..450bfa2 100644
          PauseAction::OpenBenchmark => {
              game.pause_screen = PauseScreen::Benchmark;
          }
-@@ -5652,6 +5675,7 @@ pub fn update_game(
+@@ -5652,6 +5681,7 @@ pub fn update_game(
              game.paused = false;
              core.apply_cursor_grab(&gfx.window, Some(game));
          }
