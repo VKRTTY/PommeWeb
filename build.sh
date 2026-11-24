@@ -15,7 +15,9 @@ TOOLCHAIN_DIR="$HOME/.rustup/toolchains/$TOOLCHAIN-$(rustc -vV | sed -n 's/^host
 export PATH="$TOOLCHAIN_DIR/bin:$PATH"
 # This nightly's rust-lld looks for libLLVM beside itself rather than in the
 # toolchain's lib/.
-export DYLD_FALLBACK_LIBRARY_PATH="$TOOLCHAIN_DIR/lib"
+if [ "$(uname -s)" = Darwin ]; then
+  export DYLD_FALLBACK_LIBRARY_PATH="$TOOLCHAIN_DIR/lib"
+fi
 
 cd "$REPO"
 flag=""
