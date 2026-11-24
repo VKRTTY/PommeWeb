@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {relayEndpoint, RelayTransport} from './transport.mjs';
+import {localWorldEndpoint, relayEndpoint, RelayTransport} from './transport.mjs';
 class FakeSocket extends EventTarget {
   readyState = 0;
   bufferedAmount = 0;
@@ -45,4 +45,13 @@ test('rejects non-binary messages rather than parsing them as packets', async ()
   const read = transport.read(8);
   FakeSocket.current.emit('unexpected text');
   await assert.rejects(read, /Invalid or oversized/);
+});
+
+test('singleplayer uses the page origin and accepts a signed world seed', () => {
+  const id = '1234567890abcdef1234567890abcdef';
+  const path = '/local-world/'+id+'/-9223372036854775808/4/8';
+  assert.equal(localWorldEndpoint('http://127.0.0.1:8461/app',path),
+    'ws://127.0.0.1:8461'+path);
+  assert.throws(()=>localWorldEndpoint('http://127.0.0.1', '//example.com'+path));
+  assert.throws(()=>localWorldEndpoint('http://127.0.0.1', '/local-world/../0/4/8'));
 });

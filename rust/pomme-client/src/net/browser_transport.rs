@@ -19,6 +19,9 @@ extern "C" {
     #[wasm_bindgen(static_method_of = RelayTransport, catch)]
     fn connect(host: &str, port: u16) -> Result<Promise, JsValue>;
 
+    #[wasm_bindgen(static_method_of = RelayTransport, catch, js_name = connectWorld)]
+    fn connect_world(endpoint: &str) -> Result<Promise, JsValue>;
+
     #[wasm_bindgen(method, catch)]
     fn read(this: &RelayTransport, limit: u32) -> Result<Promise, JsValue>;
 
@@ -48,7 +51,15 @@ pub struct BrowserReader {
 pub struct BrowserWriter(Rc<Shared>);
 
 pub async fn connect(host: &str, port: u16) -> io::Result<(BrowserReader, BrowserWriter)> {
-    let promise = RelayTransport::connect(host, port).map_err(relay_error)?;
+    open(RelayTransport::connect(host, port)).await
+}
+
+pub async fn connect_world(endpoint: &str) -> io::Result<(BrowserReader, BrowserWriter)> {
+    open(RelayTransport::connect_world(endpoint)).await
+}
+
+async fn open(promise: Result<Promise, JsValue>) -> io::Result<(BrowserReader, BrowserWriter)> {
+    let promise = promise.map_err(relay_error)?;
     let socket = JsFuture::from(promise).await.map_err(relay_error)?;
     let socket = Rc::new(Shared(socket.unchecked_into()));
     Ok((

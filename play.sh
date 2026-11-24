@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # One command to play: builds the page if it isn't built, starts the relay
-# (and a local offline SteelMC server if one is built), and opens Chrome.
+# with the integrated local-world feature, and opens Chrome.
 #   ./play.sh            play (builds only when dist/ is missing)
 #   ./play.sh --build    rebuild first
-# Then: Multiplayer -> Direct Connection -> 127.0.0.1 -> Join Server.
+# Then: Play -> Create New World or select an existing world.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -19,30 +19,20 @@ if [ "${1:-}" = --build ] || [ ! -f "$HERE/dist/pomme_bg.wasm" ]; then
 fi
 
 RELAY="$REPO/target/release/pomme-relay"
-[ -x "$RELAY" ] || (cd "$REPO" && cargo build -p pomme-relay --release)
+(cd "$REPO" && cargo build -p pomme-relay --release --features local-worlds)
+
+if nc -z 127.0.0.1 "$PORT" 2>/dev/null; then
+  echo "Port $PORT is already in use; stop the other relay or set PORT." >&2
+  exit 1
+fi
 
 pids=()
 trap 'kill "${pids[@]}" 2>/dev/null || true' EXIT
-
-# A local offline server to join, when SteelMC has been built
-# (cd "$REPO/third_party/SteelMC" && cargo build --release -p steel).
-STEEL="$REPO/third_party/SteelMC/target/release/steel"
-if [ -x "$STEEL" ] && ! nc -z 127.0.0.1 25565 2>/dev/null; then
-  SERVER="$HERE/.server"
-  mkdir -p "$SERVER/config"
-  if [ ! -f "$SERVER/config/config.toml" ]; then
-    sed -e 's/^online_mode = true/online_mode = false/' -e 's/^encryption = true/encryption = false/' \
-      -e 's/^view_distance = .*/view_distance = 8/' -e 's/^simulation_distance = .*/simulation_distance = 8/' \
-      "$REPO/third_party/SteelMC/package-content/config.toml" > "$SERVER/config/config.toml"
-  fi
-  (cd "$SERVER" && "$STEEL") & pids+=($!)
-  echo "Local server starting on 127.0.0.1:25565"
-fi
-
-"$RELAY" --dir "$HERE/dist" --listen "127.0.0.1:$PORT" --allow-private-servers & pids+=($!)
-until nc -z 127.0.0.1 "$PORT" 2>/dev/null; do sleep 0.3; done
+"$RELAY" --dir "$HERE/dist" --listen "127.0.0.1:$PORT" --allow-private-servers \
+  --local-worlds "${POMME_LOCAL_WORLDS:-$HERE/.server/worlds}" & pids+=($!)
+until nc -z 127.0.0.1 "$PORT" 2>/dev/null; do kill -0 "${pids[0]}" 2>/dev/null || exit 1; sleep 0.3; done
 
 URL="http://127.0.0.1:$PORT"
-echo "Pomme is at $URL — Multiplayer -> Direct Connection -> 127.0.0.1"
+echo "Pomme is at $URL — Play opens your local worlds"
 open -a "Google Chrome" "$URL" 2>/dev/null || open "$URL" || true
 wait

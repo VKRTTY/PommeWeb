@@ -1,5 +1,5 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index e6250f3..2a17ef2 100644
+index e6250f3..0757ba5 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -3083,6 +3083,7 @@ dependencies = [
@@ -66,7 +66,15 @@ index e6250f3..2a17ef2 100644
   "zip 9.4.1",
  ]
  
-@@ -5357,8 +5373,6 @@ dependencies = [
+@@ -4245,6 +4261,7 @@ dependencies = [
+  "futures-util",
+  "hickory-resolver",
+  "pomme-protocol",
++ "pomme-singleplayer",
+  "reqwest",
+  "tokio",
+  "tokio-tungstenite 0.30.0",
+@@ -5357,8 +5374,6 @@ dependencies = [
  [[package]]
  name = "simdnbt"
  version = "0.10.0"
@@ -75,7 +83,7 @@ index e6250f3..2a17ef2 100644
  dependencies = [
   "byteorder",
   "flate2",
-@@ -5998,6 +6012,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -5998,6 +6013,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
  dependencies = [
   "deranged",
@@ -581,7 +589,7 @@ index 51fb7e7..4fcbf6e 100644
  /// Vanilla `CLIENT_WAIT_TIMEOUT_MS`: let the player in regardless after this
  /// long, counted from the login/respawn that started the load.
 diff --git a/pomme-client/src/app/mod.rs b/pomme-client/src/app/mod.rs
-index e9b59ba..aa95080 100644
+index e9b59ba..e51ee4a 100644
 --- a/pomme-client/src/app/mod.rs
 +++ b/pomme-client/src/app/mod.rs
 @@ -10,7 +10,8 @@ pub mod state_slot;
@@ -594,7 +602,16 @@ index e9b59ba..aa95080 100644
  
  use thiserror::Error;
  use winit::application::ApplicationHandler;
-@@ -257,7 +258,7 @@ impl App {
+@@ -226,6 +227,8 @@ fn start_connecting(
+                 .join(crate::renderer::distant::worker::folder_name(server)),
+         ),
+         (None, Transport::Memory { .. }) => None,
++        #[cfg(target_arch = "wasm32")]
++        (None, Transport::BrowserWorld { .. }) => None,
+     };
+     let connection = spawn_connection(&core.tokio_rt, connect_args);
+     // An options save from before the session is no reason to tell this
+@@ -257,7 +260,7 @@ impl App {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -603,7 +620,7 @@ index e9b59ba..aa95080 100644
          presence: Option<crate::discord::DiscordPresence>,
          user: UserData,
          quick_play: Option<QuickPlay>,
-@@ -472,6 +473,10 @@ impl App {
+@@ -472,6 +475,10 @@ impl App {
          if let Some(gfx) = self.phase.gfx_mut() {
              gfx.window.request_redraw();
          }
@@ -614,7 +631,7 @@ index e9b59ba..aa95080 100644
      }
  
      /// Updates a release build to the newest release before the menu.
-@@ -511,6 +516,13 @@ impl App {
+@@ -511,6 +518,13 @@ impl App {
          Ok(())
      }
  
@@ -628,7 +645,7 @@ index e9b59ba..aa95080 100644
      /// A text field has keyboard focus: chat and the in-game fields, or a
      /// menu form's.
      #[cfg(mobile)]
-@@ -664,7 +676,16 @@ fn create_window(
+@@ -664,7 +678,16 @@ fn create_window(
          .with_visible(cfg!(mobile))
          .with_active(!core.test_window)
          .with_window_icon(window_icon);
@@ -646,7 +663,7 @@ index e9b59ba..aa95080 100644
          // In pixels, as vanilla's `--width` is, so shots are the same size at
          // any display scale.
          let size = core.window_size;
-@@ -1522,9 +1543,14 @@ impl ApplicationHandler for App {
+@@ -1522,9 +1545,14 @@ impl ApplicationHandler for App {
                      // Paced here so input arriving during the wait is pumped before the next frame.
                      gfx.renderer.pace_frame();
                  }
@@ -719,6 +736,40 @@ index a9c5416..4935f96 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
+diff --git a/pomme-client/src/app/phases/in_menu.rs b/pomme-client/src/app/phases/in_menu.rs
+index 1d0cc61..21a6449 100644
+--- a/pomme-client/src/app/phases/in_menu.rs
++++ b/pomme-client/src/app/phases/in_menu.rs
+@@ -25,7 +25,7 @@ pub fn open_world(core: &mut AppCore, folder: &str, quick_play: bool) -> MenuUpd
+         .world_to_launch(folder)
+         .ok_or_else(|| "Could not find a world with the provided identifier".to_owned())
+         .and_then(|(summary, dir)| singleplayer::open(&summary, &dir, core.view_distance()));
+-    let (world, client_end) = match opened {
++    let (world, endpoint) = match opened {
+         Ok(opened) => opened,
+         Err(reason) => {
+             tracing::error!("Failed to open {folder}: {reason}");
+@@ -39,15 +39,12 @@ pub fn open_world(core: &mut AppCore, folder: &str, quick_play: bool) -> MenuUpd
+     core.menu.world_played(folder);
+     core.audio.stop_menu_music();
+     let username = core.user.username.clone();
++    #[cfg(not(target_arch = "wasm32"))]
++    let transport = Transport::Memory { end: endpoint, protocol: singleplayer::PROTOCOL };
++    #[cfg(target_arch = "wasm32")]
++    let transport = Transport::BrowserWorld { endpoint, protocol: singleplayer::PROTOCOL };
+     MenuUpdateResult::Connect {
+-        connect_args: Box::new(connect_args(
+-            core,
+-            Transport::Memory {
+-                end: client_end,
+-                protocol: singleplayer::PROTOCOL,
+-            },
+-            username,
+-        )),
++        connect_args: Box::new(connect_args(core, transport, username)),
+         world: Some(world),
+     }
+ }
 diff --git a/pomme-client/src/app/phases/mod.rs b/pomme-client/src/app/phases/mod.rs
 index 4dfe6b5..1758dff 100644
 --- a/pomme-client/src/app/phases/mod.rs
@@ -1088,7 +1139,7 @@ index cf19404..7e4a209 100644
          if let Err(e) = written {
              eprintln!("[{}] couldn't write the report: {e}", self.name);
 diff --git a/pomme-client/src/headless.rs b/pomme-client/src/headless.rs
-index 4acbd34..fd0dd25 100644
+index 4acbd34..5fa1127 100644
 --- a/pomme-client/src/headless.rs
 +++ b/pomme-client/src/headless.rs
 @@ -6,7 +6,8 @@ use std::collections::HashMap;
@@ -1117,6 +1168,14 @@ index 4acbd34..fd0dd25 100644
  pub fn run(
      rd: u32,
      play: QuickPlay,
+@@ -180,6 +183,7 @@ pub fn run(
+     code
+ }
+ 
++#[cfg(not(target_arch = "wasm32"))]
+ fn open(play: QuickPlay, dirs: &DataDirs, rd: u32) -> Result<(Transport, Option<World>), String> {
+     match play {
+         QuickPlay::Multiplayer(server) => Ok((
 diff --git a/pomme-client/src/lang.rs b/pomme-client/src/lang.rs
 index 2644848..aacb71b 100644
 --- a/pomme-client/src/lang.rs
@@ -1140,7 +1199,7 @@ index 2644848..aacb71b 100644
      }
  
 diff --git a/pomme-client/src/lib.rs b/pomme-client/src/lib.rs
-index 4fe8d97..6c94411 100644
+index 4fe8d97..c65bf83 100644
 --- a/pomme-client/src/lib.rs
 +++ b/pomme-client/src/lib.rs
 @@ -1,6 +1,7 @@
@@ -1187,7 +1246,7 @@ index 4fe8d97..6c94411 100644
      else {
          return;
      };
-@@ -76,6 +84,36 @@ fn use_bundled_moltenvk() {
+@@ -76,6 +84,37 @@ fn use_bundled_moltenvk() {
      unsafe { std::env::set_var("VK_ICD_FILENAMES", icd) };
  }
  
@@ -1209,6 +1268,7 @@ index 4fe8d97..6c94411 100644
 +        .map_err(|e| wasm_bindgen::JsValue::from_str(&e))?;
 +    pomme_dirs::set_root(PathBuf::from("/pomme"));
 +    web_fs::init().await?;
++    singleplayer::detect().await;
 +    CANVAS.set(Some(canvas));
 +    let args = LaunchArgs::from_words("--username Player")
 +        .map_err(|e| wasm_bindgen::JsValue::from_str(&e.to_string()))?;
@@ -1224,7 +1284,7 @@ index 4fe8d97..6c94411 100644
  /// What differs per platform at startup.
  pub struct Platform {
      /// Replaces the per-user data directory; Android passes its app storage.
-@@ -89,6 +127,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -89,6 +128,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      // OS, so a chunk-load spike lingers; 10 ms (v2's default) returns it
      // promptly without purging on every free. The bindings don't name
      // `mi_option_purge_delay`; it is option 15 in both v2 and v3.
@@ -1232,7 +1292,7 @@ index 4fe8d97..6c94411 100644
      unsafe { libmimalloc_sys::mi_option_set(15, 10) };
      #[cfg(target_os = "macos")]
      use_bundled_moltenvk();
-@@ -119,7 +158,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -119,7 +159,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
  
      update::clean_up();
      let check_for_update = update::enabled(&args);
@@ -1241,7 +1301,7 @@ index 4fe8d97..6c94411 100644
  
      // Bare launches take the newest joinable version, skipping any staged one.
      let default_version = VERSIONS
-@@ -148,7 +187,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -148,7 +188,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      let data_dirs = args.data_dirs(version);
  
      let log_dir = data_dirs.game_dir.join("logs");
@@ -1250,7 +1310,7 @@ index 4fe8d97..6c94411 100644
      let _guard = logging::init(&log_dir);
      #[cfg(target_os = "ios")]
      for dir in [
-@@ -175,14 +214,9 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -175,14 +215,9 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      // A single connection needs only a few async workers; the default runtime
      // spawns one per core and floods them decoding the chunk-load burst, starving
      // the render/mesh threads. Cap it so those cores stay free.
@@ -1267,7 +1327,7 @@ index 4fe8d97..6c94411 100644
          let _runtime = rt.enter();
          crate::net::chat_security::ProfileKeyServices::prefetch();
      }
-@@ -192,6 +226,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -192,6 +227,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
              app::QuickPlay::Singleplayer(benchmark::bench_world(&data_dirs.game_dir, version))
          })
      });
@@ -1275,7 +1335,7 @@ index 4fe8d97..6c94411 100644
      if args.headless
          && let Some(rd) = args.chunk_bench
      {
-@@ -200,11 +235,12 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -200,11 +236,12 @@ pub fn run(args: LaunchArgs, platform: Platform) {
          std::process::exit(headless::run(rd, play, user, version, &data_dirs, &rt));
      }
  
@@ -1289,7 +1349,7 @@ index 4fe8d97..6c94411 100644
          cfg!(mobile),
      );
  
-@@ -213,7 +249,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -213,7 +250,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      #[cfg(feature = "test-harness")]
      let discord = args.harness_script.is_none();
      #[cfg(not(feature = "test-harness"))]
@@ -1298,7 +1358,7 @@ index 4fe8d97..6c94411 100644
      let presence = discord
          .then(|| {
              crate::discord::DiscordPresence::start(version)
-@@ -257,6 +293,15 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -257,6 +294,15 @@ pub fn run(args: LaunchArgs, platform: Platform) {
          });
          app = app.with_harness(harness);
      }
@@ -1488,7 +1548,7 @@ index 032ec64..5d17ff8 100644
  const MAX_OLD_SAMPLES_WEIGHT: u32 = 49;
  /// Vanilla `CLAMP_COEFFICIENT`: one batch can move the average by at most 3x
 diff --git a/pomme-client/src/net/conn.rs b/pomme-client/src/net/conn.rs
-index 443cecc..c927ac9 100644
+index 443cecc..ad438e3 100644
 --- a/pomme-client/src/net/conn.rs
 +++ b/pomme-client/src/net/conn.rs
 @@ -8,6 +8,7 @@
@@ -1499,7 +1559,7 @@ index 443cecc..c927ac9 100644
  use tokio::net::TcpStream;
  
  use super::crypt::{self, Decryptor, Encryptor};
-@@ -138,11 +139,18 @@ impl Conn {
+@@ -138,11 +139,24 @@ impl Conn {
          self.writer.enc_cipher.is_some()
      }
  
@@ -1515,14 +1575,29 @@ index 443cecc..c927ac9 100644
 +        Ok(Self::new(NetReader::Browser(read), NetWriter::Browser(write)))
 +    }
 +
++    #[cfg(target_arch = "wasm32")]
++    pub async fn from_local_world(endpoint: &str) -> io::Result<Self> {
++        let (read, write) = super::browser_transport::connect_world(endpoint).await?;
++        Ok(Self::new(NetReader::Browser(read), NetWriter::Browser(write)))
++    }
++
      pub fn from_memory(end: MemoryEnd) -> Self {
          Self::new(NetReader::Memory(end.rx), NetWriter::Memory(end.tx))
      }
 diff --git a/pomme-client/src/net/connection.rs b/pomme-client/src/net/connection.rs
-index 3b4d51d..97e52f0 100644
+index 3b4d51d..723de65 100644
 --- a/pomme-client/src/net/connection.rs
 +++ b/pomme-client/src/net/connection.rs
-@@ -93,7 +93,7 @@ pub struct ConnectArgs {
+@@ -66,6 +66,8 @@ impl From<super::resolve::ConnectError> for ConnectionError {
+ }
+ 
+ pub enum Transport {
++    #[cfg(target_arch = "wasm32")]
++    BrowserWorld { endpoint: String, protocol: i32 },
+     Remote {
+         server: String,
+         /// The server's protocol from an earlier server-list ping, when joining
+@@ -93,7 +95,7 @@ pub struct ConnectArgs {
  pub struct ConnectionHandle {
      pub event_rx: crossbeam_channel::Receiver<NetworkEvent>,
      pub packet_tx: PacketSender,
@@ -1531,7 +1606,7 @@ index 3b4d51d..97e52f0 100644
  }
  
  impl Drop for ConnectionHandle {
-@@ -104,11 +104,16 @@ impl Drop for ConnectionHandle {
+@@ -104,11 +106,16 @@ impl Drop for ConnectionHandle {
      }
  }
  
@@ -1549,7 +1624,22 @@ index 3b4d51d..97e52f0 100644
      let (packet_tx, packet_rx) = mpsc::unbounded_channel::<Outbound>();
      let game_packet_tx = packet_tx.clone();
      let packet_tx = PacketSender::new(packet_tx);
-@@ -333,7 +338,7 @@ async fn negotiate_wire_version(
+@@ -153,6 +160,14 @@ pub async fn connect_to_server(
+                 wire,
+             )
+         }
++        #[cfg(target_arch = "wasm32")]
++        Transport::BrowserWorld { endpoint, protocol } => {
++            adopt_wire_protocol(protocol);
++            select_block_protocol(&event_tx, protocol);
++            let mut conn = Conn::from_local_world(&endpoint).await?;
++            super::resolve::send_intention(&mut conn, "localhost", 0, ClientIntent::Login).await?;
++            (conn, protocol)
++        }
+         Transport::Memory { end, protocol } => {
+             // The integrated server's protocol is known, so there is nothing
+             // to probe; one other than native is translated like a remote
+@@ -333,7 +348,7 @@ async fn negotiate_wire_version(
                  let (status, _) = super::resolve::request_status(server_addr).await.ok()?;
                  Some(status.version?.protocol)
              };
@@ -1558,7 +1648,7 @@ index 3b4d51d..97e52f0 100644
                  .await
                  .ok()
                  .flatten()
-@@ -868,8 +873,7 @@ async fn game_loop(
+@@ -868,8 +883,7 @@ async fn game_loop(
      let translation = translation_session.as_deref();
      let mut inbound_chat =
          super::chat::InboundChat::for_protocol(crate::version::session_protocol());
@@ -1568,7 +1658,7 @@ index 3b4d51d..97e52f0 100644
      if deferred_login.is_some() {
          // 1.20.1 sends both from its login handler, where later versions send
          // them in the configuration phase (ClientPacketListener.handleLogin).
-@@ -887,6 +891,10 @@ async fn game_loop(
+@@ -887,6 +901,10 @@ async fn game_loop(
          write_game_frame(&mut conn.writer, translation, brand.encode()).await?;
      }
      loop {
@@ -3720,10 +3810,31 @@ index 6a559b3..1c4da7e 100644
      }
  
 diff --git a/pomme-client/src/singleplayer.rs b/pomme-client/src/singleplayer.rs
-index 0eb98ef..3a61101 100644
+index 0eb98ef..095ec65 100644
 --- a/pomme-client/src/singleplayer.rs
 +++ b/pomme-client/src/singleplayer.rs
-@@ -17,7 +17,7 @@ pub const UNAVAILABLE_MESSAGE: &str = "This build was compiled without singlepla
+@@ -4,7 +4,12 @@
+ //! app phases can carry a world without a `cfg` at every construction site.
+ 
+ /// Whether this build can open a world.
+-pub const AVAILABLE: bool = cfg!(feature = "singleplayer");
++pub fn available() -> bool {
++    #[cfg(not(target_arch = "wasm32"))]
++    return cfg!(feature = "singleplayer");
++    #[cfg(target_arch = "wasm32")]
++    browser::available()
++}
+ 
+ /// The protocol the integrated server speaks.
+ #[cfg(feature = "singleplayer")]
+@@ -13,11 +18,14 @@ pub const PROTOCOL: i32 = pomme_singleplayer::PROTOCOL;
+ pub const PROTOCOL: i32 = pomme_protocol::version::NATIVE.protocol;
+ 
+ /// Shown wherever the feature is compiled out.
++#[cfg(not(target_arch = "wasm32"))]
+ pub const UNAVAILABLE_MESSAGE: &str = "This build was compiled without singleplayer.";
++#[cfg(target_arch = "wasm32")]
++pub const UNAVAILABLE_MESSAGE: &str = "Singleplayer needs the local Pomme relay (./play.sh).";
  
  #[cfg(feature = "singleplayer")]
  mod steel {
@@ -3732,6 +3843,26 @@ index 0eb98ef..3a61101 100644
      use std::path::{Path, PathBuf};
  
      use pomme_singleplayer::{
+@@ -162,7 +170,7 @@ mod steel {
+     }
+ }
+ 
+-#[cfg(not(feature = "singleplayer"))]
++#[cfg(all(not(feature = "singleplayer"), not(target_arch = "wasm32")))]
+ mod steel {
+     use std::path::Path;
+ 
+@@ -200,4 +208,10 @@ mod steel {
+     }
+ }
+ 
++#[cfg(not(target_arch = "wasm32"))]
+ pub use steel::{World, open};
++#[cfg(target_arch = "wasm32")]
++#[path = "singleplayer_web.rs"]
++mod browser;
++#[cfg(target_arch = "wasm32")]
++pub use browser::{World, detect, open};
 diff --git a/pomme-client/src/test_util.rs b/pomme-client/src/test_util.rs
 index 40db6c7..0957cf1 100644
 --- a/pomme-client/src/test_util.rs
@@ -4348,10 +4479,74 @@ index 324f669..afaa2c0 100644
  
      #[test]
 diff --git a/pomme-client/src/ui/menu/worlds.rs b/pomme-client/src/ui/menu/worlds.rs
-index 98f5d8f..34a550a 100644
+index 98f5d8f..b438db2 100644
 --- a/pomme-client/src/ui/menu/worlds.rs
 +++ b/pomme-client/src/ui/menu/worlds.rs
-@@ -1116,7 +1116,7 @@ impl MainMenu {
+@@ -80,7 +80,7 @@ impl MainMenu {
+         let mut elements = vec![MenuElement::BlurBackground];
+         let mut any_hovered = false;
+         let mut action = MenuAction::None;
+-        let playable = crate::singleplayer::AVAILABLE;
++        let playable = crate::singleplayer::available();
+ 
+         elements.push(MenuElement::Text {
+             x: common::gui_half_width(screen_w, gs),
+@@ -886,6 +886,7 @@ impl MainMenu {
+         }
+ 
+         let footer_y = screen_h - footer_h + (footer_h - btn_h) / 2.0;
++        let mut action = MenuAction::None;
+         if push_button(
+             &mut elements,
+             &mut any_hovered,
+@@ -898,8 +899,11 @@ impl MainMenu {
+             "Create New World",
+             true,
+         ) && clicked
++        && let Some(folder) = self.create_world(key_bindings)
++        && cfg!(target_arch = "wasm32")
++        && crate::singleplayer::available()
+         {
+-            self.create_world(key_bindings);
++            action = MenuAction::PlayWorld { folder };
+         }
+         if push_button(
+             &mut elements,
+@@ -919,7 +923,7 @@ impl MainMenu {
+ 
+         MainMenuResult {
+             elements,
+-            action: MenuAction::None,
++            action,
+             cursor_pointer: any_hovered,
+             clicked_button: clicked && any_hovered,
+         }
+@@ -982,7 +986,7 @@ impl MainMenu {
+         self.set_screen(back, key_bindings);
+     }
+ 
+-    fn create_world(&mut self, key_bindings: &KeyBindings) {
++    fn create_world(&mut self, key_bindings: &KeyBindings) -> Option<String> {
+         let name = self.world_name.value().trim();
+         let (game_mode, hardcore) = self.create.mode.stored();
+         let summary = crate::ui::world_list::WorldSummary {
+@@ -997,10 +1001,12 @@ impl MainMenu {
+             version: self.version.clone(),
+             extra: Default::default(),
+         };
+-        if let Err(e) = self.world_list.create(summary) {
+-            tracing::error!("Failed to create world: {e}");
+-        }
++        let folder = summary.folder.clone();
++        let created = self.world_list.create(summary).map_err(|e|
++            tracing::error!("Failed to create world: {e}")
++        ).is_ok();
+         self.set_screen(Screen::WorldList, key_bindings);
++        created.then_some(folder)
+     }
+ 
+     /// Vanilla recomputes this per keystroke; per frame would stat the disk for
+@@ -1116,7 +1122,7 @@ impl MainMenu {
              y,
              form_w,
              "Reset Icon",
@@ -4360,7 +4555,7 @@ index 98f5d8f..34a550a 100644
          );
          y += btn_h + spacing;
  
-@@ -1127,9 +1127,10 @@ impl MainMenu {
+@@ -1127,9 +1133,10 @@ impl MainMenu {
              y,
              form_w,
              "Open World Folder",
@@ -5569,10 +5764,22 @@ index ac1e710..dc683cc 100644
      let mut archive =
          zip::ZipArchive::new(std::io::Cursor::new(jar)).map_err(|e| format!("Client jar: {e}"))?;
 diff --git a/pomme-relay/Cargo.toml b/pomme-relay/Cargo.toml
-index 47025a4..6f711c6 100644
+index 47025a4..03eb490 100644
 --- a/pomme-relay/Cargo.toml
 +++ b/pomme-relay/Cargo.toml
-@@ -13,7 +13,7 @@ futures-util = "0.3"
+@@ -6,14 +6,19 @@ edition = "2024"
+ license = "GPL-3.0-or-later"
+ publish = false
+ 
++[features]
++default = []
++local-worlds = ["dep:pomme-singleplayer"]
++
+ [dependencies]
++pomme-singleplayer = { path = "../pomme-singleplayer", optional = true }
+ axum = { version = "0.8", features = ["ws"] }
+ clap = { version = "4", features = ["derive"] }
+ futures-util = "0.3"
  pomme-protocol = { path = "../pomme-protocol" }
  hickory-resolver = { version = "0.26", features = ["tokio", "system-config"] }
  reqwest = { workspace = true, features = ["stream"] }
@@ -5581,8 +5788,31 @@ index 47025a4..6f711c6 100644
  tower-http = { version = "0.7", features = ["fs"] }
  tracing = { workspace = true }
  tracing-subscriber = { workspace = true, features = ["env-filter"] }
+diff --git a/pomme-relay/src/connect.rs b/pomme-relay/src/connect.rs
+index 3a35274..2489d7b 100644
+--- a/pomme-relay/src/connect.rs
++++ b/pomme-relay/src/connect.rs
+@@ -355,7 +355,17 @@ fn unwrapped(ip: IpAddr) -> IpAddr {
+ /// speaking to a game server.
+ async fn bridge(socket: WebSocket, tcp: TcpStream, limits: &Limits, client: IpAddr) {
+     let _ = tcp.set_nodelay(true);
+-    let (mut from_server, mut to_server) = tcp.into_split();
++    let (from_server, to_server) = tcp.into_split();
++    bridge_stream(socket, from_server, to_server, limits, client).await;
++}
++
++pub(crate) async fn bridge_stream(
++    socket: WebSocket,
++    mut from_server: impl tokio::io::AsyncRead + Unpin,
++    mut to_server: impl tokio::io::AsyncWrite + Unpin,
++    limits: &Limits,
++    client: IpAddr,
++) {
+     let (mut to_page, mut from_page) = socket.split();
+     let charged = |bytes: usize| limits.relayed(client, bytes + MESSAGE_COST);
+     let sent = tokio::time::timeout(HANDSHAKE_WAIT, opening(&mut from_page, charged));
 diff --git a/pomme-relay/src/main.rs b/pomme-relay/src/main.rs
-index 7c52164..5e27839 100644
+index 7c52164..de76006 100644
 --- a/pomme-relay/src/main.rs
 +++ b/pomme-relay/src/main.rs
 @@ -1,7 +1,7 @@
@@ -5594,7 +5824,16 @@ index 7c52164..5e27839 100644
  //! as `/relay/<host>/<path>`, and only the hosts in [`relay::ALLOWED_HOSTS`]
  //! are fetched. A page can't open sockets either, so it reaches game servers
  //! through a WebSocket to `/connect/<host>/<port>`, which this bridges to the
-@@ -34,7 +34,7 @@ use tower_http::services::ServeDir;
+@@ -20,6 +20,8 @@
+ mod connect;
+ mod guard;
+ mod limits;
++#[cfg(feature = "local-worlds")]
++mod local_world;
+ mod relay;
+ 
+ use std::net::SocketAddr;
+@@ -34,11 +36,14 @@ use tower_http::services::ServeDir;
  
  #[derive(Parser)]
  struct Args {
@@ -5603,6 +5842,68 @@ index 7c52164..5e27839 100644
      #[arg(long, default_value = "pomme-web/dist")]
      dir: PathBuf,
      #[arg(long, default_value = "127.0.0.1:8080")]
+     listen: SocketAddr,
++    #[cfg(feature = "local-worlds")]
++    #[arg(long, value_name = "DIRECTORY")]
++    local_worlds: Option<PathBuf>,
+     #[command(flatten)]
+     config: Config,
+ }
+@@ -50,6 +55,8 @@ struct AppState {
+     config: Arc<Config>,
+     connections: Arc<guard::Connections>,
+     limits: Arc<limits::Limits>,
++    #[cfg(feature = "local-worlds")]
++    worlds: Option<Arc<local_world::Worlds>>,
+ }
+ 
+ impl AppState {
+@@ -59,6 +66,8 @@ impl AppState {
+             config: Arc::new(config),
+             connections: Arc::default(),
+             limits: Arc::default(),
++            #[cfg(feature = "local-worlds")]
++            worlds: None,
+         }
+     }
+ }
+@@ -121,7 +130,21 @@ async fn main() {
+             "Listening beyond this machine without --public-host: anything that names localhost is answered"
+         );
+     }
+-    serve(listener, app(AppState::new(args.config), &args.dir)).await;
++    let state = AppState::new(args.config);
++    #[cfg(feature = "local-worlds")]
++    let state = {
++        let mut state = state;
++        if let Some(path) = args.local_worlds {
++            assert!(args.listen.ip().is_loopback() && state.config.public_host.is_none()
++                && !state.config.trust_proxy, "--local-worlds requires a loopback-only relay");
++            std::fs::create_dir_all(&path).expect("create local world storage");
++            state.worlds = Some(Arc::new(local_world::Worlds::new(
++                path.canonicalize().expect("resolve local world storage"),
++            )));
++        }
++        state
++    };
++    serve(listener, app(state, &args.dir)).await;
+ }
+ 
+ async fn serve(listener: TcpListener, app: Router) {
+@@ -135,7 +158,12 @@ async fn serve(listener: TcpListener, app: Router) {
+ 
+ /// The routes, with the page in `dir` served for everything else.
+ fn app(state: AppState, dir: &Path) -> Router {
+-    Router::new()
++    let routes = Router::new();
++    #[cfg(feature = "local-worlds")]
++    let routes = routes
++        .route("/local-world/{id}", get(local_world::status))
++        .route("/local-world/{id}/{seed}/{rules}/{distance}", get(local_world::play));
++    routes
+         .nest("/relay", Router::new().fallback(any(relay::relay)))
+         .route("/connect/{host}/{port}", get(connect::connect))
+         .fallback_service(ServeDir::new(dir))
 diff --git a/pomme-singleplayer/Cargo.toml b/pomme-singleplayer/Cargo.toml
 index 8c92226..2b9c0e1 100644
 --- a/pomme-singleplayer/Cargo.toml

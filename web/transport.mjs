@@ -18,6 +18,17 @@ export function relayEndpoint(page, host, port) {
   return endpoint.href;
 }
 
+export function localWorldEndpoint(page, path) {
+  if (!/^\/local-world\/[0-9a-f]{32}\/-?\d+\/\d+\/\d+$/.test(path)) {
+    throw new TypeError('Invalid local world endpoint');
+  }
+  const origin = new URL(page);
+  if (!['http:', 'https:'].includes(origin.protocol)) throw new TypeError('Invalid relay origin');
+  const url = new URL(path, origin.origin);
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+  return url.href;
+}
+
 export class RelayTransport {
   #socket;
   #queue = [];
@@ -45,7 +56,15 @@ export class RelayTransport {
   }
 
   static async connect(host, port, page = globalThis.location.href, Socket = globalThis.WebSocket) {
-    const socket = new Socket(relayEndpoint(page, host, port));
+    return RelayTransport.open(relayEndpoint(page, host, port), Socket);
+  }
+
+  static async connectWorld(path) {
+    return RelayTransport.open(localWorldEndpoint(globalThis.location.origin, path), globalThis.WebSocket);
+  }
+
+  static async open(url, Socket) {
+    const socket = new Socket(url);
     const transport = new RelayTransport(socket);
     await new Promise((resolve, reject) => {
       socket.addEventListener('open', resolve, {once: true});

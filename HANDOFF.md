@@ -6,11 +6,11 @@ the browser port up where it stopped. Last updated 2026-11-23.
 ## Play it now
 
 ```sh
-./play.sh            # builds dist/ if missing, starts relay + local server, opens Chrome
+./play.sh            # builds dist/ if missing, starts the relay, opens Chrome
 ./play.sh --build    # rebuild the game first
 ```
 
-Then **Multiplayer → Direct Connection → `127.0.0.1` → Join Server**.
+Then **Singleplayer → Create New World**, or select a world and press **Play Selected World**.
 The page is at http://127.0.0.1:8460. Chrome or Edge (WebGPU) only.
 
 ## Where things are
@@ -107,7 +107,8 @@ tree in the browser:
   the game thread whenever their results are read.
 - The chunk mesher runs queued jobs in `MeshDispatcher::drain_results`
   (`MeshQueue::run_here`), for 8 ms per frame, or 20 ms while there's a
-  backlog. This was not yet rebuilt and tested when this file was written.
+  backlog. The singleplayer smoke run observed about 2.2–2.6 ms per column
+  after warm-up; this is not a formal performance benchmark.
 - `tasks::spawn_job` runs one-off thread work inline. `util::parallel_map`
   is sequential on wasm.
 - Distant terrain has no thread (its jobs are dropped).
@@ -140,7 +141,10 @@ Working in Chrome:
 - the loading screens;
 - the title menu with the panorama, and every menu screen with the blur;
 - joining offline-mode servers;
-- world rendering: terrain, sky, clouds, HUD, hand, player model.
+- world rendering: terrain, sky, clouds, HUD, hand, player model;
+- local singleplayer: creating a world opens the integrated server and renders
+  gameplay in Chrome. Save and Quit, a page reload, and Play Selected World
+  reopened the same world ID in Chrome.
 
 Not done, in suggested order:
 
@@ -170,7 +174,10 @@ Not done, in suggested order:
    (`lib.rs`). Accounts already persist in localStorage (`account.rs` `WebStore`).
 3. **Distant terrain:** needs a worker (see 1), and its 4-group pipelines
    need push constants moved into a bind group.
-4. **Singleplayer:** the integrated server (SteelMC) isn't built for wasm.
+4. **Singleplayer parity:** browser world lists are IndexedDB-backed; the local
+   relay runs integrated SteelMC natively and saves to `.server/worlds`. The
+   two sides share a persisted opaque world ID. Public hosting, save import/export,
+   and deleting relay-side data from the browser are not implemented.
 5. **Clipboard** (`ui/common.rs`): the browser clipboard API is async.
 6. **Server resource packs** (`resources/packs/download.rs`) use blocking HTTP.
 7. **Screenshots** (`copy_texture_to_buffer` with unaligned rows is skipped).
@@ -205,10 +212,11 @@ that window size:
 - Direct Connection: (640, 516)
 - Options: (512, 540)
 
-Local test server: SteelMC, built with
+Optional external multiplayer test server: SteelMC, built with
 `cd "~/rust mc/third_party/SteelMC" && cargo build --release -p steel`.
-`play.sh` runs it with an offline config. That server doesn't op offline
-players, so `/gamemode` and `/tp` are refused.
+Use an offline config if connecting to that standalone test server. The
+Singleplayer menu uses a separate integrated instance inside the relay and
+does not require a separately running TCP server.
 
 ## Rules for commits to PommeWeb
 

@@ -166,9 +166,9 @@
           "done": 1
         },
         {
-          "name": "Singleplayer",
+          "name": "Local singleplayer",
           "total": 1,
-          "done": 0
+          "done": 1
         }
       ]
     }

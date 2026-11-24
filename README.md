@@ -19,11 +19,15 @@
 > [!NOTE]
 > **It plays in the browser.** Pomme's own renderer draws the menus and the
 > world in Chrome through WebGPU, and joins servers through `pomme-relay`.
-> Microsoft sign-in, distant terrain and singleplayer worlds come next.
+> Local singleplayer uses the same integrated SteelMC server as desktop.
+> Microsoft sign-in and distant terrain are still in progress.
 
 ## Screenshots
 
 <table>
+<tr>
+<td colspan="2"><img src="docs/screenshots/singleplayer-gameplay.png" alt="A singleplayer world created and played in Chrome"></td>
+</tr>
 <tr>
 <td colspan="2"><img src="docs/screenshots/gameplay-third-person.png" alt="Gameplay in Chrome"></td>
 </tr>
@@ -54,7 +58,8 @@
 - [x] **Milestone 1:** loading screen and title menu
 - [x] Server list and joining a server
 - [x] **Milestone 2:** world rendering and gameplay
-- [ ] Distant terrain and singleplayer worlds
+- [x] Local singleplayer via the loopback relay
+- [ ] Distant terrain
 - [ ] Microsoft account sign-in
 
 ## How it works
@@ -86,8 +91,12 @@ This repo holds only the web code; it builds against a Pomme checkout.
 
 ## Play
 
-**One command:** `./play.sh` builds the page if needed, starts the relay and a
-local offline server, and opens Chrome. Continuing the port? Start with
+**One command:** `./play.sh --build` rebuilds the page, starts the loopback
+relay with integrated SteelMC support, and opens Chrome. Use **Singleplayer**
+to create a world or choose **Play Selected World**. Later launches only need
+`./play.sh`. World data lives under `.server/worlds`; the browser keeps the
+world list for its current origin. Singleplayer requires the local relay and
+is not offered as a publicly hosted service. Continuing the port? Start with
 [HANDOFF.md](HANDOFF.md).
 
 By hand:
@@ -122,6 +131,9 @@ cd /path/to/pomme && cargo run -p pomme-relay --release -- \
 ```
 
 and open **http://127.0.0.1:8460** in a browser with WebGPU (Chrome or Edge).
+For local singleplayer, build the relay with `--features local-worlds` and
+pass `--local-worlds /path/to/world-saves` after Cargo's `--`. Neither
+`--public-host` nor `--trust-proxy` can be combined with this option.
 
 <details>
 <summary>Working on the port</summary>
