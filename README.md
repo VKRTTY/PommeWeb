@@ -47,6 +47,14 @@
 </tr>
 </table>
 
+## Optional HUD
+
+Press **Shift+6** while in a world to toggle the IzuClient-inspired HUD.
+It displays FPS in local and multiplayer sessions, and coordinates in
+singleplayer. This is a Rust implementation inspired by [IzuClient](https://github.com/izumihd/IzuClient), not a port of its Java modules.
+
+![Optional HUD in a local world](docs/screenshots/izu-hud.png)
+
 ## Roadmap
 
 - [x] Shaders converted to WGSL at build time — all 74 accepted by Chrome
