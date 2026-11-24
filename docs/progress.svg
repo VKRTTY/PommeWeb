@@ -1,0 +1,281 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="960" viewBox="0 0 1200 960">
+<style>
+text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #e6edf3; }
+.title { font-size: 24px; font-weight: 600; }
+.group { font-size: 19px; }
+.item { font-size: 13px; paint-order: stroke; stroke: #000; stroke-width: 2.5px; stroke-opacity: 0.55; }
+.note { font-size: 13px; fill: #8b949e; }
+</style>
+<rect width="100%" height="100%" fill="#0d1117"/>
+<text x="24" y="40" class="title">Pomme web port: 42.06% (90/214)</text>
+<text x="24" y="92" class="group">Graphics (WebGPU): 42.29% (74/175)</text>
+<rect x="24.0" y="104.0" width="487.1" height="330.0" fill="#6e7681"/>
+<rect x="24.0" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="145.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="186.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="227.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="269.0" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="310.2" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="218.9" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="267.6" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="316.3" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="365.0" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="413.7" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="462.4" y="351.5" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="24.0" y="392.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="72.7" y="392.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="121.4" y="392.8" width="48.7" height="41.2" fill="#2ea043"/>
+<rect x="170.1" y="392.8" width="48.7" height="41.2" fill="#2ea043"/>
+<line x1="72.7" y1="104.0" x2="72.7" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="121.4" y1="104.0" x2="121.4" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="170.1" y1="104.0" x2="170.1" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="218.9" y1="104.0" x2="218.9" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="267.6" y1="104.0" x2="267.6" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="316.3" y1="104.0" x2="316.3" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="365.0" y1="104.0" x2="365.0" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="413.7" y1="104.0" x2="413.7" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="462.4" y1="104.0" x2="462.4" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="145.2" x2="511.1" y2="145.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="186.5" x2="511.1" y2="186.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="227.8" x2="511.1" y2="227.8" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="269.0" x2="511.1" y2="269.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="310.2" x2="511.1" y2="310.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="351.5" x2="511.1" y2="351.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="392.8" x2="511.1" y2="392.8" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="24.0" y="104.0" width="487.1" height="330.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="30.0" y="121.0" class="item">Shaders</text>
+<rect x="511.1" y="104.0" width="197.5" height="165.0" fill="#6e7681"/>
+<line x1="560.5" y1="104.0" x2="560.5" y2="269.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="609.9" y1="104.0" x2="609.9" y2="269.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="659.2" y1="104.0" x2="659.2" y2="269.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="511.1" y1="145.2" x2="708.6" y2="145.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="511.1" y1="186.5" x2="708.6" y2="186.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="511.1" y1="227.8" x2="708.6" y2="227.8" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="511.1" y="104.0" width="197.5" height="165.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="517.1" y="121.0" class="item">Render pass</text>
+<rect x="511.1" y="269.0" width="197.5" height="165.0" fill="#6e7681"/>
+<line x1="560.5" y1="269.0" x2="560.5" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="609.9" y1="269.0" x2="609.9" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="659.2" y1="269.0" x2="659.2" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="511.1" y1="310.2" x2="708.6" y2="310.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="511.1" y1="351.5" x2="708.6" y2="351.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="511.1" y1="392.8" x2="708.6" y2="392.8" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="511.1" y="269.0" width="197.5" height="165.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="517.1" y="286.0" class="item">Commands</text>
+<rect x="708.6" y="104.0" width="164.6" height="171.6" fill="#6e7681"/>
+<line x1="749.8" y1="104.0" x2="749.8" y2="275.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="790.9" y1="104.0" x2="790.9" y2="275.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="832.0" y1="104.0" x2="832.0" y2="275.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="708.6" y1="146.9" x2="873.2" y2="146.9" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="708.6" y1="189.8" x2="873.2" y2="189.8" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="708.6" y1="232.7" x2="873.2" y2="232.7" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="708.6" y="104.0" width="164.6" height="171.6" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="714.6" y="121.0" class="item">Swapchain</text>
+<rect x="708.6" y="275.6" width="164.6" height="158.4" fill="#6e7681"/>
+<line x1="749.8" y1="275.6" x2="749.8" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="790.9" y1="275.6" x2="790.9" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="832.0" y1="275.6" x2="832.0" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="708.6" y1="328.4" x2="873.2" y2="328.4" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="708.6" y1="381.2" x2="873.2" y2="381.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="708.6" y="275.6" width="164.6" height="158.4" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="714.6" y="292.6" class="item">Buffers</text>
+<rect x="873.2" y="104.0" width="151.4" height="129.1" fill="#6e7681"/>
+<line x1="923.7" y1="104.0" x2="923.7" y2="233.1" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="974.1" y1="104.0" x2="974.1" y2="233.1" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="873.2" y1="147.0" x2="1024.6" y2="147.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="873.2" y1="190.1" x2="1024.6" y2="190.1" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="873.2" y="104.0" width="151.4" height="129.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="879.2" y="121.0" class="item">Device</text>
+<rect x="1024.6" y="104.0" width="151.4" height="129.1" fill="#6e7681"/>
+<line x1="1075.1" y1="104.0" x2="1075.1" y2="233.1" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1125.5" y1="104.0" x2="1125.5" y2="233.1" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1024.6" y1="147.0" x2="1176.0" y2="147.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1024.6" y1="190.1" x2="1176.0" y2="190.1" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="1024.6" y="104.0" width="151.4" height="129.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1030.6" y="121.0" class="item">Frames</text>
+<rect x="873.2" y="233.1" width="129.8" height="100.4" fill="#6e7681"/>
+<line x1="916.4" y1="233.1" x2="916.4" y2="333.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="959.7" y1="233.1" x2="959.7" y2="333.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="873.2" y1="283.3" x2="1003.0" y2="283.3" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="873.2" y="233.1" width="129.8" height="100.4" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="879.2" y="250.1" class="item">Bind groups</text>
+<rect x="873.2" y="333.6" width="129.8" height="100.4" fill="#6e7681"/>
+<line x1="916.4" y1="333.6" x2="916.4" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="959.7" y1="333.6" x2="959.7" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="873.2" y1="383.8" x2="1003.0" y2="383.8" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="873.2" y="333.6" width="129.8" height="100.4" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="879.2" y="350.6" class="item">Pipelines</text>
+<rect x="1003.0" y="233.1" width="94.4" height="138.1" fill="#6e7681"/>
+<line x1="1050.2" y1="233.1" x2="1050.2" y2="371.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1003.0" y1="279.2" x2="1097.3" y2="279.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1003.0" y1="325.2" x2="1097.3" y2="325.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="1003.0" y="233.1" width="94.4" height="138.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1009.0" y="250.1" class="item">Textures</text>
+<rect x="1097.3" y="233.1" width="78.7" height="138.1" fill="#6e7681"/>
+<line x1="1136.7" y1="233.1" x2="1136.7" y2="371.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1097.3" y1="279.2" x2="1176.0" y2="279.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1097.3" y1="325.2" x2="1176.0" y2="325.2" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="1097.3" y="233.1" width="78.7" height="138.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1103.3" y="250.1" class="item">GPU timers</text>
+<rect x="1003.0" y="371.2" width="103.8" height="62.8" fill="#6e7681"/>
+<line x1="1054.9" y1="371.2" x2="1054.9" y2="434.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="1003.0" y1="402.6" x2="1106.8" y2="402.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="1003.0" y="371.2" width="103.8" height="62.8" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1009.0" y="388.2" class="item">Context</text>
+<rect x="1106.8" y="371.2" width="69.2" height="62.8" fill="#6e7681"/>
+<line x1="1106.8" y1="402.6" x2="1176.0" y2="402.6" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="1106.8" y="371.2" width="69.2" height="62.8" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1112.8" y="388.2" class="item">Samplers</text>
+<text x="24" y="474" class="group">Platform: 48.48% (16/33)</text>
+<rect x="24.0" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
+<rect x="24.0" y="486.0" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="24.0" y="548.5" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="24.0" y="611.0" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="24.0" y="673.5" width="139.6" height="62.5" fill="#2ea043"/>
+<line x1="24.0" y1="548.5" x2="163.6" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="611.0" x2="163.6" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="24.0" y1="673.5" x2="163.6" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="24.0" y="486.0" width="139.6" height="250.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="30.0" y="503.0" class="item">Server connection</text>
+<rect x="163.6" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
+<rect x="163.6" y="486.0" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="163.6" y="548.5" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="163.6" y="611.0" width="139.6" height="62.5" fill="#2ea043"/>
+<line x1="163.6" y1="548.5" x2="303.3" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="163.6" y1="611.0" x2="303.3" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="163.6" y1="673.5" x2="303.3" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="163.6" y="486.0" width="139.6" height="250.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="169.6" y="503.0" class="item">Audio</text>
+<rect x="303.3" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
+<rect x="303.3" y="486.0" width="139.6" height="62.5" fill="#2ea043"/>
+<line x1="303.3" y1="548.5" x2="442.9" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="303.3" y1="611.0" x2="442.9" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="303.3" y1="673.5" x2="442.9" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="303.3" y="486.0" width="139.6" height="250.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="309.3" y="503.0" class="item">Game files</text>
+<rect x="442.9" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
+<rect x="442.9" y="486.0" width="139.6" height="62.5" fill="#2ea043"/>
+<rect x="442.9" y="548.5" width="139.6" height="62.5" fill="#2ea043"/>
+<line x1="442.9" y1="548.5" x2="582.5" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="442.9" y1="611.0" x2="582.5" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="442.9" y1="673.5" x2="582.5" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="442.9" y="486.0" width="139.6" height="250.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="448.9" y="503.0" class="item">Installer</text>
+<rect x="582.5" y="486.0" width="139.6" height="250.0" fill="#6e7681"/>
+<line x1="582.5" y1="548.5" x2="722.2" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="582.5" y1="611.0" x2="722.2" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="582.5" y1="673.5" x2="722.2" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="582.5" y="486.0" width="139.6" height="250.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="588.5" y="503.0" class="item">Threads</text>
+<rect x="722.2" y="486.0" width="209.5" height="125.0" fill="#6e7681"/>
+<rect x="722.2" y="486.0" width="104.7" height="62.5" fill="#2ea043"/>
+<rect x="826.9" y="486.0" width="104.7" height="62.5" fill="#2ea043"/>
+<rect x="722.2" y="548.5" width="104.7" height="62.5" fill="#2ea043"/>
+<line x1="826.9" y1="486.0" x2="826.9" y2="611.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="722.2" y1="548.5" x2="931.6" y2="548.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="722.2" y="486.0" width="209.5" height="125.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="728.2" y="503.0" class="item">Task runtime</text>
+<rect x="722.2" y="611.0" width="209.5" height="125.0" fill="#6e7681"/>
+<line x1="826.9" y1="611.0" x2="826.9" y2="736.0" stroke="#0d1117" stroke-opacity="0.35"/>
+<line x1="722.2" y1="673.5" x2="931.6" y2="673.5" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="722.2" y="611.0" width="209.5" height="125.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="728.2" y="628.0" class="item">Accounts</text>
+<rect x="931.6" y="486.0" width="122.2" height="142.9" fill="#6e7681"/>
+<rect x="931.6" y="486.0" width="122.2" height="71.4" fill="#2ea043"/>
+<rect x="931.6" y="557.4" width="122.2" height="71.4" fill="#2ea043"/>
+<line x1="931.6" y1="557.4" x2="1053.8" y2="557.4" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="931.6" y="486.0" width="122.2" height="142.9" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="937.6" y="503.0" class="item">Logging</text>
+<rect x="1053.8" y="486.0" width="122.2" height="142.9" fill="#6e7681"/>
+<line x1="1053.8" y1="557.4" x2="1176.0" y2="557.4" stroke="#0d1117" stroke-opacity="0.35"/>
+<rect x="1053.8" y="486.0" width="122.2" height="142.9" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1059.8" y="503.0" class="item">Entry point</text>
+<rect x="931.6" y="628.9" width="81.5" height="107.1" fill="#6e7681"/>
+<rect x="931.6" y="628.9" width="81.5" height="107.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="937.6" y="645.9" class="item">Clock</text>
+<rect x="1013.1" y="628.9" width="81.5" height="107.1" fill="#6e7681"/>
+<rect x="1013.1" y="628.9" width="81.5" height="107.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1019.1" y="645.9" class="item">Clipboard</text>
+<rect x="1094.5" y="628.9" width="81.5" height="107.1" fill="#6e7681"/>
+<rect x="1094.5" y="628.9" width="81.5" height="107.1" fill="#2ea043"/>
+<rect x="1094.5" y="628.9" width="81.5" height="107.1" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="1100.5" y="645.9" class="item">Discord</text>
+<text x="24" y="776" class="group">Game: 0.00% (0/6)</text>
+<rect x="24.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="24.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="30.0" y="805.0" class="item">Loading screen</text>
+<rect x="216.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="216.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="222.0" y="805.0" class="item">Title menu</text>
+<rect x="408.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="408.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="414.0" y="805.0" class="item">Server list</text>
+<rect x="600.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="600.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="606.0" y="805.0" class="item">Joining a server</text>
+<rect x="792.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="792.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="798.0" y="805.0" class="item">World rendering</text>
+<rect x="984.0" y="788.0" width="192.0" height="120.0" fill="#6e7681"/>
+<rect x="984.0" y="788.0" width="192.0" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
+<text x="990.0" y="805.0" class="item">Singleplayer</text>
+<text x="24" y="942" class="note">Each square is one piece of the port; green ones work in a browser.</text>
+</svg>

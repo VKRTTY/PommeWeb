@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pomme</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+  #status { position: fixed; inset: auto 0 1rem 0; text-align: center; color: #aaa;
+    font: 14px system-ui, sans-serif; pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="pomme" tabindex="0"></canvas>
+<div id="status">Loading Pomme…</div>
+<script type="module">
+  import init, {start} from './pomme.js';
+  const status = document.getElementById('status');
+  try {
+    await init();
+    status.textContent = '';
+    await start(document.getElementById('pomme'));
+  } catch (e) {
+    console.error(e);
+    status.textContent = 'Pomme failed to start: ' + (e?.message ?? e);
+  }
+</script>
+</body>
+</html>
