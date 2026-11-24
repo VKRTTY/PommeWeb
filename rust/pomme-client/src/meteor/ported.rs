@@ -20,6 +20,7 @@ pub fn apply(meteor: &mut MeteorClient, input: &mut InputState, game: &mut GameS
     }
 
     input.forced_actions.clear();
+    input.forced_actions.extend(meteor.memory.pending.drain());
     if !game.world_has_pointer() {
         return;
     }

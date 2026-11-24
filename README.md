@@ -82,7 +82,9 @@ Press **Right Shift** in a world, or use **Meteor Client** on the pause menu.
   rotation.
 - **Behavior is ported module by module.** Working now: Fullbright, Zoom
   (smoothing, scroll, cinematic), Sprint, Auto Walk, Auto Jump, Step, Reach,
-  Velocity, Jesus, Fast Climb, Flight, High Jump and No Fall. The rest keep their settings but don't act
+  Velocity, Jesus, Fast Climb, Flight, High Jump, No Fall, Speed, Spider, Air
+  Jump, Long Jump, Anti Void, Auto Clicker, Anti AFK, Auto Respawn, Notifier,
+  Kill Aura and Timer (24 of 169). The rest keep their settings but don't act
   yet; the full status is in [HANDOFF.md](HANDOFF.md).
 
 ## How it works

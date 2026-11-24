@@ -10,6 +10,7 @@
 
 pub mod gui;
 pub mod hud;
+pub mod modules;
 pub mod ported;
 
 use std::collections::HashMap;
@@ -83,7 +84,9 @@ pub static CATALOG: LazyLock<Catalog> = LazyLock::new(|| {
 /// settings like Meteor's but don't act yet.
 pub const PORTED: &[&str] = &[
     "fullbright", "zoom", "sprint", "auto-walk", "auto-jump", "step", "reach", "velocity",
-    "jesus", "fast-climb", "flight", "high-jump", "no-fall",
+    "jesus", "fast-climb", "flight", "high-jump", "no-fall", "speed", "spider", "air-jump",
+    "long-jump", "anti-void", "auto-clicker", "anti-afk", "auto-respawn", "notifier", "kill-aura",
+    "timer",
 ];
 
 /// One module's state.
@@ -112,6 +115,7 @@ pub struct MeteorClient {
     pub gui: gui::GuiState,
     pub hud: hud::HudState,
     pub zoom: ZoomState,
+    pub memory: modules::Memory,
     /// What changed since the last save.
     dirty: bool,
     /// Toggles to announce in chat (Meteor's chat feedback).
@@ -149,6 +153,7 @@ impl MeteorClient {
             gui,
             hud: hud::HudState::default(),
             zoom: ZoomState { value: 1.0, time: 0.0 },
+            memory: modules::Memory::default(),
             dirty: false,
             feedback: Vec::new(),
         }

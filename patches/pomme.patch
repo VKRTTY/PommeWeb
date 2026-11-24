@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..2d8aa30 100644
+index cfadfa1..d92288b 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -561,11 +561,12 @@ index cfadfa1..2d8aa30 100644
          let fov_effect_scale = self.menu.fov_effect();
          renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
          // TODO: lava camera fluid (no eyes_in_lava).
-@@ -4286,6 +4290,7 @@ impl AppCore {
+@@ -4286,6 +4290,8 @@ impl AppCore {
              game.interaction.slow_due_to_using_item(),
              vehicle,
          );
 +        crate::meteor::ported::tick(&mut self.meteor, input, game);
++        crate::meteor::modules::tick(&mut self.meteor, input, game, &connection.packet_tx);
          let dx = game.player.position.x - game.player.prev_position.x;
          let dz = game.player.position.z - game.player.prev_position.z;
          crate::entity::update_walk_animation(
@@ -911,7 +912,7 @@ index e9b59ba..39a2426 100644
              _ => {}
          }
 diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
-index a9c5416..4cb5b45 100644
+index a9c5416..c3bf505 100644
 --- a/pomme-client/src/app/phases/in_game.rs
 +++ b/pomme-client/src/app/phases/in_game.rs
 @@ -1,7 +1,7 @@
@@ -1013,7 +1014,18 @@ index a9c5416..4cb5b45 100644
      // Position the audio listener at the player's head and push current
      // volumes before draining sound packets this frame.
      let listener_pos = game.player.eye_pos();
-@@ -3313,7 +3333,7 @@ pub fn update_game(
+@@ -3239,7 +3259,9 @@ pub fn update_game(
+     run_ticks(core, gfx, connection, game, carried);
+ 
+     // Added before the drain, which takes every packet when a tick is owed.
+-    core.tick_accumulator += dt;
++    // Meteor's Timer: the game runs faster or slower.
++    let timer = if core.meteor.is_active("timer") { core.meteor.get_f64("timer", "multiplier") as f32 } else { 1.0 };
++    core.tick_accumulator += dt * timer;
+     let disconnect_reason =
+         core.drain_network_events(connection, None, &mut gfx.renderer, &gfx.window, game);
+     crate::ui::menu::sync_resource_packs(core);
+@@ -3313,7 +3335,7 @@ pub fn update_game(
          core.apply_cursor_grab(&gfx.window, Some(game));
      }
      // TODO: remaining vanilla keybinds with no backing feature yet:
@@ -1022,7 +1034,7 @@ index a9c5416..4cb5b45 100644
      // G quick actions, C/X creative saved hotbars, spectator hotbar select.
  
      // Finished F2 captures announce in chat (vanilla screenshot.success: bare
-@@ -3920,7 +3940,7 @@ pub fn update_game(
+@@ -3920,7 +3942,7 @@ pub fn update_game(
      // Vanilla Hud.extractSubtitleOverlay: drawn last when no screen or an
      // in-game one is open (then even with F1), else here under the screen.
      // The queue is empty while the option is off.
@@ -1031,7 +1043,7 @@ index a9c5416..4cb5b45 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
-@@ -4172,7 +4192,12 @@ pub fn update_game(
+@@ -4172,7 +4194,12 @@ pub fn update_game(
              .build(sw, sh, &menu_input, &mut core.input.key_bindings, |t, s| {
                  r.menu_text_width(t, s)
              });
@@ -1045,7 +1057,7 @@ index a9c5416..4cb5b45 100644
          core.input.clear_just_pressed_actions();
          core.sync_display_mode(&gfx.window);
      } else if game.death_screen_open && !dialog_open {
-@@ -4212,7 +4237,9 @@ pub fn update_game(
+@@ -4212,7 +4239,9 @@ pub fn update_game(
          let clicked = core.input.left_just_pressed();
          // Vanilla `PauseScreen.extractBackground`: blurred while the menu
          // shows; F3+Esc's hidden pause draws nothing.
@@ -1056,7 +1068,7 @@ index a9c5416..4cb5b45 100644
          pause_action = pause::build_pause_menu(
              &mut elements,
              sw,
-@@ -4223,10 +4250,56 @@ pub fn update_game(
+@@ -4223,10 +4252,56 @@ pub fn update_game(
              game.pause_screen,
              game.server_render_distance,
              game.singleplayer,
@@ -1113,7 +1125,7 @@ index a9c5416..4cb5b45 100644
      let mut player_preview = None;
      let mut book_preview = None;
      let mut screen_pointer = false;
-@@ -5622,6 +5695,15 @@ pub fn update_game(
+@@ -5622,6 +5697,15 @@ pub fn update_game(
          PauseAction::Disconnect => {
              return GameUpdateResult::ManualDisconnect;
          }
@@ -1129,7 +1141,7 @@ index a9c5416..4cb5b45 100644
          PauseAction::OpenBenchmark => {
              game.pause_screen = PauseScreen::Benchmark;
          }
-@@ -5652,6 +5734,7 @@ pub fn update_game(
+@@ -5652,6 +5736,7 @@ pub fn update_game(
              game.paused = false;
              core.apply_cursor_grab(&gfx.window, Some(game));
          }
