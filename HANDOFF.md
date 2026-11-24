@@ -235,3 +235,9 @@ does not require a separately running TCP server.
 - This repo holds web code only. Never push the whole Pomme source here.
 - Update `docs/progress.json`, rerun `python3 docs/progress.py`, and add
   screenshots to `docs/screenshots/` and the README as things start working.
+
+## Meteor Client port
+
+See HANDOFF-2.md item 8: the module catalog, click GUI and HUD exist in
+`pomme-client/src/meteor/`; behavior is ported module by module (5 of 169 so
+far). `scripts/meteor-extract.py` regenerates the catalog from Meteor's Java.

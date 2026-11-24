@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..84f6de3 100644
+index cfadfa1..e8d4a88 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -469,7 +469,16 @@ index cfadfa1..84f6de3 100644
  
  use glam::{FloatExt, dvec3};
  use pomme_protocol::serverbound::{
-@@ -1015,9 +1015,12 @@ pub struct AppCore {
+@@ -1007,6 +1007,8 @@ impl RepeatStepper {
+ }
+ 
+ pub struct AppCore {
++    /// The Meteor Client port's modules, GUI and HUD.
++    pub meteor: crate::meteor::MeteorClient,
+     pub user: UserData,
+     pub presence: Option<DiscordPresence>,
+     pub display_mode: DisplayMode,
+@@ -1015,7 +1017,7 @@ pub struct AppCore {
      pub window_size: winit::dpi::LogicalSize<u32>,
      pub input: InputState,
      pub menu: MainMenu,
@@ -477,13 +486,8 @@ index cfadfa1..84f6de3 100644
 +    pub tokio_rt: Arc<crate::tasks::Runtime>,
      pub data_dirs: DataDirs,
      pub version: String,
-+    pub izu_hud: bool,
-+    pub izu_zoom: bool,
-+    pub izu_ping: bool,
      builtin_resources: BuiltinRepositorySource,
-     folder_resources: FolderRepositorySource,
-     registered_resources: RegisteredRepositorySource,
-@@ -1160,7 +1163,7 @@ impl AppCore {
+@@ -1160,7 +1162,7 @@ impl AppCore {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -492,17 +496,15 @@ index cfadfa1..84f6de3 100644
          presence: Option<DiscordPresence>,
          user: UserData,
          window_size: winit::dpi::LogicalSize<u32>,
-@@ -1204,6 +1207,9 @@ impl AppCore {
-             tokio_rt,
-             data_dirs,
-             version,
-+            izu_hud: false,
-+            izu_zoom: false,
-+            izu_ping: false,
-             builtin_resources,
-             folder_resources,
-             registered_resources,
-@@ -1257,8 +1263,8 @@ impl AppCore {
+@@ -1194,6 +1196,7 @@ impl AppCore {
+         let (head_tx, head_rx) = crossbeam_channel::unbounded();
+ 
+         let mut core = Self {
++            meteor: crate::meteor::MeteorClient::new(&data_dirs.game_dir),
+             user,
+             presence,
+             display_mode,
+@@ -1257,8 +1260,8 @@ impl AppCore {
          self.registered_resources.set_symlink_policy(policy);
  
          let root = self.data_dirs.game_dir.join("resourcepacks");
@@ -513,7 +515,7 @@ index cfadfa1..84f6de3 100644
          {
              tracing::warn!(path = %root.display(), %error, "Cannot create resource pack directory");
          }
-@@ -2229,7 +2235,7 @@ impl AppCore {
+@@ -2229,7 +2232,7 @@ impl AppCore {
          let rx = &connection.event_rx;
  
          // Phase timers for the chunk-load benchmark's worst-frame breakdown.
@@ -522,7 +524,7 @@ index cfadfa1..84f6de3 100644
  
          // Block edits go on the priority lane so they apply instantly even while
          // chunks stream in, instead of starving behind the load backlog.
-@@ -2257,7 +2263,7 @@ impl AppCore {
+@@ -2257,7 +2260,7 @@ impl AppCore {
                      | NetworkEvent::LightUpdate { .. }
                      | NetworkEvent::ChunkBiomes { .. }
              )
@@ -531,7 +533,7 @@ index cfadfa1..84f6de3 100644
              match event {
                  NetworkEvent::ProtocolSelected { protocol } => game.select_protocol(protocol),
                  NetworkEvent::LoggedIn => {
-@@ -3811,14 +3817,14 @@ impl AppCore {
+@@ -3811,14 +3814,14 @@ impl AppCore {
          // New chunk loads mark themselves dirty when their queued light
          // applies (GameState::update_light), which raises this flag.
          let loads_happened = std::mem::take(&mut game.pending_load_rescan);
@@ -549,13 +551,13 @@ index cfadfa1..84f6de3 100644
          game.rescan_mesh_jobs(self.menu.chunk_detail);
          game.last_update_phases.rescan_ms = ms(t_rescan);
  
-@@ -3963,7 +3969,11 @@ impl AppCore {
+@@ -3963,7 +3966,11 @@ impl AppCore {
          }
  
          // Vanilla ticks the camera FOV interpolation even while dead.
 -        renderer.set_base_fov(self.menu.fov as f32);
-+        renderer.set_base_fov(if self.izu_hud && self.izu_zoom {
-+            30.0
++        renderer.set_base_fov(if self.meteor.is_active("zoom") {
++            self.menu.fov as f32 / self.meteor.get_f64("zoom", "zoom").max(1.0) as f32
 +        } else {
 +            self.menu.fov as f32
 +        });
@@ -563,10 +565,20 @@ index cfadfa1..84f6de3 100644
          renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
          // TODO: lava camera fluid (no eyes_in_lava).
 diff --git a/pomme-client/src/app/input/mod.rs b/pomme-client/src/app/input/mod.rs
-index 2073c61..9805f1e 100644
+index 2073c61..4681060 100644
 --- a/pomme-client/src/app/input/mod.rs
 +++ b/pomme-client/src/app/input/mod.rs
-@@ -123,7 +123,7 @@ pub struct InputState {
+@@ -105,6 +105,9 @@ pub struct InputState {
+     /// `keyPressed` + `charTyped` callback pair. Drained once per frame by
+     /// whichever screen owns the focused field.
+     text_events: Vec<crate::ui::text_edit::TextInputEvent>,
++    /// Actions held by Meteor modules (Sprint, AutoWalk, AutoJump) as if
++    /// their keys were down.
++    pub forced_actions: HashSet<Action>,
+     binding_capture: bool,
+     binding_presses: Vec<InputKey>,
+     // Keep captured keys/buttons suppressed until release, even if capture
+@@ -123,7 +126,7 @@ pub struct InputState {
      weak_rumble_effect: Option<Effect>,
      strong_rumble_effect: Option<Effect>,
      active_gamepad_id: Option<GamepadId>,
@@ -575,7 +587,15 @@ index 2073c61..9805f1e 100644
      recent_actions: HashMap<Action, bool>,
      touch_actions_down: HashSet<Action>,
      /// Touch taps' releases, held back until the presses have been read.
-@@ -243,7 +243,7 @@ impl InputState {
+@@ -227,6 +230,7 @@ impl InputState {
+             gamepad_buttons_just_pressed: HashSet::new(),
+             click_counts: HashMap::new(),
+             text_events: Vec::new(),
++            forced_actions: HashSet::new(),
+             binding_capture: false,
+             binding_presses: Vec::new(),
+             binding_keys_down: HashSet::new(),
+@@ -243,7 +247,7 @@ impl InputState {
              weak_rumble_effect: weak_effect,
              strong_rumble_effect: strong_effect,
              active_gamepad_id: None,
@@ -584,7 +604,7 @@ index 2073c61..9805f1e 100644
              recent_actions: HashMap::new(),
              touch_actions_down: HashSet::new(),
              tap_releases: Vec::new(),
-@@ -260,7 +260,7 @@ impl InputState {
+@@ -260,7 +264,7 @@ impl InputState {
          }
          let held = self
              .touch
@@ -593,19 +613,28 @@ index 2073c61..9805f1e 100644
          self.apply_touch(held);
  
          if self.binding_capture {
-@@ -334,7 +334,10 @@ impl InputState {
+@@ -300,7 +304,9 @@ impl InputState {
+                     self.recent_actions.remove(&Action::ToggleInventory);
+                 }
+                 if self.action_just_pressed(Action::OpenMenu) && !game.dialog_open() {
+-                    if game.chat.is_open() {
++                    if game.meteor_gui_open {
++                        // The GUI takes Escape itself (`meteor::gui::build`).
++                    } else if game.chat.is_open() {
+                         // ChatScreen consumes Escape before the game-level
+                         // pause action: link confirmation, then suggestions,
+                         // then the chat screen itself.
+@@ -334,6 +340,9 @@ impl InputState {
                                      game.pause_screen = PauseScreen::Benchmark
                                  }
                                  PauseScreen::Benchmark => game.pause_screen = PauseScreen::Main,
--                                PauseScreen::Main | PauseScreen::Hidden => game.paused = false,
 +                                PauseScreen::Advancements(_) => {
 +                                    game.pause_screen = PauseScreen::Main;
 +                                }
-+                                PauseScreen::Main | PauseScreen::Hidden | PauseScreen::IzuModules => game.paused = false,
+                                 PauseScreen::Main | PauseScreen::Hidden => game.paused = false,
                              }
                          } else {
-                             game.paused = true;
-@@ -448,7 +451,7 @@ impl InputState {
+@@ -448,7 +457,7 @@ impl InputState {
      /// When a gamepad button was last pressed or a stick pushed past half
      /// way, which rules out a resting stick's drift. Pomme-only: vanilla has
      /// no gamepad to count as input for its AFK frame limit.
@@ -614,7 +643,7 @@ index 2073c61..9805f1e 100644
          self.gamepad_used_at
      }
  
-@@ -459,7 +462,7 @@ impl InputState {
+@@ -459,7 +468,7 @@ impl InputState {
              gilrs::EventType::AxisChanged(_, value, _) => value.abs() > 0.5,
              _ => false,
          } {
@@ -623,18 +652,38 @@ index 2073c61..9805f1e 100644
          }
  
          if let gilrs::EventType::ButtonReleased(button, _) = event.event {
-@@ -1015,6 +1018,10 @@ impl InputState {
-         std::mem::take(&mut self.binding_presses)
+@@ -543,7 +552,8 @@ impl InputState {
+ 
+     /// Whether any input bound to `action` is held.
+     pub fn action_held(&self, action: Action) -> bool {
+-        self.key_bindings
++        self.forced_actions.contains(&action)
++            || self.key_bindings
+             .inputs_for_action(action)
+             .any(|input| self.input_pressed(input))
+     }
+@@ -556,7 +566,7 @@ impl InputState {
      }
  
-+    pub(crate) fn shift_only(&self) -> bool {
-+        self.modifiers.state() == winit::keyboard::ModifiersState::SHIFT
+     pub fn performing_action(&self, action: Action) -> bool {
+-        if self.touch_actions_down.contains(&action) {
++        if self.touch_actions_down.contains(&action) || self.forced_actions.contains(&action) {
+             return true;
+         }
+         match action {
+@@ -697,6 +707,11 @@ impl InputState {
+         self.just_pressed.contains(&key)
+     }
+ 
++    /// Every key pressed since the last `end_frame`.
++    pub fn keys_just_pressed(&self) -> Vec<KeyCode> {
++        self.just_pressed.iter().copied().collect()
 +    }
 +
-     pub fn set_modifiers(&mut self, modifiers: Modifiers) {
-         self.modifiers = modifiers;
-     }
-@@ -1185,7 +1192,7 @@ impl InputState {
+     /// Hotbar digit pressed since the last `end_frame`, for container swaps.
+     pub fn hotbar_key_just_pressed(&self) -> Option<u8> {
+         // `AbstractContainerScreen.checkHotbarKeyPressed` takes the first.
+@@ -1185,7 +1200,7 @@ impl InputState {
              p,
              gameplay,
              layout,
@@ -707,7 +756,7 @@ index 51fb7e7..4fcbf6e 100644
  /// Vanilla `CLIENT_WAIT_TIMEOUT_MS`: let the player in regardless after this
  /// long, counted from the login/respawn that started the load.
 diff --git a/pomme-client/src/app/mod.rs b/pomme-client/src/app/mod.rs
-index e9b59ba..de1cf1d 100644
+index e9b59ba..39a2426 100644
 --- a/pomme-client/src/app/mod.rs
 +++ b/pomme-client/src/app/mod.rs
 @@ -10,7 +10,8 @@ pub mod state_slot;
@@ -781,50 +830,36 @@ index e9b59ba..de1cf1d 100644
          // In pixels, as vanilla's `--width` is, so shots are the same size at
          // any display scale.
          let size = core.window_size;
-@@ -908,6 +931,42 @@ impl ApplicationHandler for App {
+@@ -826,6 +849,10 @@ impl ApplicationHandler for App {
+         if let Some(install) = &mut self.install {
+             match event {
+                 WindowEvent::RedrawRequested => {
++                // A language picked, or one whose file was still downloading.
++                if crate::lang::take_reload() {
++                    crate::lang::load(self.core.resources());
++                }
+                     let step = install.frame(&self.core);
+                     if matches!(step, install::Step::Relaunched) {
+                         event_loop.exit();
+@@ -908,6 +935,17 @@ impl ApplicationHandler for App {
                          self.core.input.on_key_event(&event);
                          return app;
                      }
-+                    // Consume the HUD chord so it doesn't also select hotbar slot 6.
 +                    if event.state.is_pressed()
-+                        && key == Some(winit::keyboard::KeyCode::Digit6)
-+                        && self.core.input.shift_only()
-+                        && matches!(&app, AppPhase::InGame { game, .. } if game.input_live())
-+                    {
-+                        if !event.repeat {
-+                            self.core.izu_hud = !self.core.izu_hud;
-+                            self.core.izu_zoom = false;
-+                        }
-+                        return app;
-+                    }
-+                    if self.core.izu_hud
-+                        && event.state.is_pressed()
-+                        && key == Some(winit::keyboard::KeyCode::KeyZ)
-+                        && self.core.input.shift_only()
-+                        && matches!(&app, AppPhase::InGame { game, .. } if game.input_live())
-+                    {
-+                        if !event.repeat {
-+                            self.core.izu_zoom = !self.core.izu_zoom;
-+                        }
-+                        return app;
-+                    }
-+                    if self.core.izu_hud
-+                        && event.state.is_pressed()
 +                        && !event.repeat
-+                        && key == Some(winit::keyboard::KeyCode::KeyI)
-+                        && self.core.input.shift_only()
++                        && key == Some(winit::keyboard::KeyCode::ShiftRight)
 +                        && let AppPhase::InGame { game, gfx, .. } = &mut app
 +                        && game.input_live()
 +                    {
-+                        game.paused = true;
-+                        game.pause_screen = crate::ui::pause::PauseScreen::IzuModules;
++                        // Meteor's click GUI, on its default `open-gui` bind.
++                        game.meteor_gui_open = true;
 +                        self.core.apply_cursor_grab(&gfx.window, Some(game));
 +                        return app;
 +                    }
                      // F3 held suppresses global keys (vanilla
                      // handleGlobalKeyPress); press only, no repeat.
                      if let Some(Gfx { window, .. }) = app.gfx_mut()
-@@ -1120,6 +1179,13 @@ impl ApplicationHandler for App {
+@@ -1120,6 +1158,13 @@ impl ApplicationHandler for App {
                                      }
                                  } else {
                                      match code {
@@ -838,7 +873,7 @@ index e9b59ba..de1cf1d 100644
                                          // F3+Esc pauses without opening the
                                          // menu (vanilla pauseGame(true)).
                                          _ if self
-@@ -1522,9 +1588,14 @@ impl ApplicationHandler for App {
+@@ -1522,9 +1567,14 @@ impl ApplicationHandler for App {
                      // Paced here so input arriving during the wait is pumped before the next frame.
                      gfx.renderer.pace_frame();
                  }
@@ -854,7 +889,7 @@ index e9b59ba..de1cf1d 100644
              _ => {}
          }
 diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
-index a9c5416..ba6f9e5 100644
+index a9c5416..4cb5b45 100644
 --- a/pomme-client/src/app/phases/in_game.rs
 +++ b/pomme-client/src/app/phases/in_game.rs
 @@ -1,7 +1,7 @@
@@ -866,7 +901,36 @@ index a9c5416..ba6f9e5 100644
  
  use glam::FloatExt as _;
  use pomme_item::components::EquipmentSlot;
-@@ -1822,7 +1822,7 @@ impl GameState {
+@@ -272,6 +272,8 @@ pub struct GameState {
+     pub chat: ChatState,
+     pub server_dialog: Option<crate::ui::server_dialog::ServerDialogState>,
+     pub sign_editor: Option<crate::ui::sign_edit::SignEditState>,
++    /// Meteor's click GUI is open (Right Shift).
++    pub meteor_gui_open: bool,
+     pub server_links: Vec<crate::ui::server_dialog::ServerLink>,
+     pub dialog_registry: Arc<crate::ui::server_dialog::DialogRegistry>,
+     /// The connection is in the configuration phase (the join, or a
+@@ -638,6 +640,7 @@ impl GameState {
+             },
+             server_dialog: None,
+             sign_editor: None,
++            meteor_gui_open: false,
+             server_links: Vec::new(),
+             dialog_registry: Arc::default(),
+             configuring: true,
+@@ -1029,7 +1032,10 @@ impl GameState {
+     }
+ 
+     pub fn gui_open(&self) -> bool {
+-        self.in_game_ui() || self.dialog_open() || self.game_mode_switcher.is_some()
++        self.in_game_ui()
++            || self.dialog_open()
++            || self.game_mode_switcher.is_some()
++            || self.meteor_gui_open
+     }
+ 
+     /// Vanilla `Screen.isInGameUi`: the open screen is a container or a sign.
+@@ -1822,7 +1828,7 @@ impl GameState {
      /// in before the game phase takes over.
      pub fn drain_and_upload_meshes(&mut self, renderer: &mut Renderer) {
          let mut batch = self.drain_meshes();
@@ -875,7 +939,7 @@ index a9c5416..ba6f9e5 100644
          renderer.upload_distant(self.distant.drain());
          let (wanted, gone) = renderer.take_distant_requests();
          self.distant.request(wanted, gone);
-@@ -1846,7 +1846,7 @@ impl GameState {
+@@ -1846,7 +1852,7 @@ impl GameState {
      /// The meshes still waiting to upload and then the frame's ready ones,
      /// stale ones dropped.
      pub fn drain_meshes(&mut self) -> Vec<ChunkMeshData> {
@@ -884,7 +948,7 @@ index a9c5416..ba6f9e5 100644
          let mut batch = std::mem::take(&mut self.pending_upload);
          for mesh in self.mesh_dispatcher.drain_results(batch.len()) {
              // Stale meshes count too: worker time spent is worker time spent.
-@@ -1896,7 +1896,7 @@ impl GameState {
+@@ -1896,7 +1902,7 @@ impl GameState {
          // an opened one yet.
          let mut tracker = LevelLoadTracker::start_client_load(
              std::time::Duration::ZERO,
@@ -893,7 +957,20 @@ index a9c5416..ba6f9e5 100644
          );
          // 1.20.1 and 1.20.2 have no LEVEL_CHUNKS_LOAD_START game event (1.20.4
          // added it), so nothing would ever move the tracker on; those clients
-@@ -3173,7 +3173,7 @@ pub fn update_game(
+@@ -3158,7 +3164,11 @@ fn run_ticks(
+     }
+     gfx.renderer.tick_lightmap(lightmap_info(
+         game,
+-        core.menu.brightness,
++        if core.meteor.is_active("fullbright") {
++            1.0
++        } else {
++            core.menu.brightness
++        },
+         sky_partial_tick(core),
+     ));
+ }
+@@ -3173,9 +3183,19 @@ pub fn update_game(
  ) -> GameUpdateResult {
      // Snapshot last frame's phase timings before this frame overwrites them: they
      // align with `raw_dt`, which measures the previous frame's full duration.
@@ -901,8 +978,20 @@ index a9c5416..ba6f9e5 100644
 +    let frame_start = web_time::Instant::now();
      let prev_phases = game.last_update_phases;
  
++    // Meteor: module binds while playing, then what the ported modules do.
++    if game.world_has_pointer() {
++        for key in core.input.keys_just_pressed() {
++            if key != winit::keyboard::KeyCode::ShiftRight {
++                core.meteor.on_key(key, true);
++            }
++        }
++    }
++    crate::meteor::ported::apply(&mut core.meteor, &mut core.input, game);
++
      // Position the audio listener at the player's head and push current
-@@ -3313,7 +3313,7 @@ pub fn update_game(
+     // volumes before draining sound packets this frame.
+     let listener_pos = game.player.eye_pos();
+@@ -3313,7 +3333,7 @@ pub fn update_game(
          core.apply_cursor_grab(&gfx.window, Some(game));
      }
      // TODO: remaining vanilla keybinds with no backing feature yet:
@@ -911,43 +1000,7 @@ index a9c5416..ba6f9e5 100644
      // G quick actions, C/X creative saved hotbars, spectator hotbar select.
  
      // Finished F2 captures announce in chat (vanilla screenshot.success: bare
-@@ -3849,6 +3849,35 @@ pub fn update_game(
- 
-     // F1 hides the closed-chat overlay; an open chat is a screen and renders
-     // regardless (vanilla Hud.extractChat vs ChatScreen).
-+    // IzuClient-inspired cosmetic HUD. The server can restrict coordinate
-+    // disclosure through reduced debug info, which Pomme doesn't yet track.
-+    // Until that setting is wired up, show XYZ only in local worlds.
-+    if core.izu_hud && !game.hide_gui && !game.show_debug && !benchmark_running
-+        && game.input_live()
-+    {
-+        let fps = gfx.fps_counter.display_fps();
-+        let text = if game.singleplayer {
-+            let p = game.player.position;
-+            format!("Izu HUD  |  FPS: {fps}  |  XYZ: {:.1} / {:.1} / {:.1}", p.x, p.y, p.z)
-+        } else {
-+            format!("Izu HUD  |  FPS: {fps}")
-+        };
-+        let mut text = text;
-+        if core.izu_zoom {
-+            text.push_str("  |  Zoom");
-+        }
-+        if core.izu_ping {
-+            match game.tab_list.players.get(&core.user.uuid).map(|entry| entry.latency) {
-+                Some(ms) if ms >= 0 => text.push_str(&format!("  |  Ping: {ms}ms")),
-+                _ => text.push_str("  |  Ping: N/A"),
-+            }
-+        }
-+        elements.push(MenuElement::Text {
-+            x: 4.0 * gs, y: 4.0 * gs, text,
-+            scale: crate::ui::common::FONT_SIZE * gs, color: [1.0; 4], centered: false,
-+        });
-+    }
-+
-     if !game.hide_gui || game.chat.is_focused() {
-         let dialog_open = game.dialog_open();
-         let command_tree = game.command_tree.clone();
-@@ -3920,7 +3949,7 @@ pub fn update_game(
+@@ -3920,7 +3940,7 @@ pub fn update_game(
      // Vanilla Hud.extractSubtitleOverlay: drawn last when no screen or an
      // in-game one is open (then even with F1), else here under the screen.
      // The queue is empty while the option is off.
@@ -956,7 +1009,7 @@ index a9c5416..ba6f9e5 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
-@@ -4172,7 +4201,12 @@ pub fn update_game(
+@@ -4172,7 +4192,12 @@ pub fn update_game(
              .build(sw, sh, &menu_input, &mut core.input.key_bindings, |t, s| {
                  r.menu_text_width(t, s)
              });
@@ -970,7 +1023,7 @@ index a9c5416..ba6f9e5 100644
          core.input.clear_just_pressed_actions();
          core.sync_display_mode(&gfx.window);
      } else if game.death_screen_open && !dialog_open {
-@@ -4212,7 +4246,9 @@ pub fn update_game(
+@@ -4212,7 +4237,9 @@ pub fn update_game(
          let clicked = core.input.left_just_pressed();
          // Vanilla `PauseScreen.extractBackground`: blurred while the menu
          // shows; F3+Esc's hidden pause draws nothing.
@@ -981,29 +1034,80 @@ index a9c5416..ba6f9e5 100644
          pause_action = pause::build_pause_menu(
              &mut elements,
              sw,
-@@ -4223,6 +4259,9 @@ pub fn update_game(
+@@ -4223,10 +4250,56 @@ pub fn update_game(
              game.pause_screen,
              game.server_render_distance,
              game.singleplayer,
 +            &game.toasts,
-+            core.izu_zoom,
-+            core.izu_ping,
          );
          core.input.clear_just_pressed_actions();
      }
-@@ -5622,6 +5661,11 @@ pub fn update_game(
+ 
++    // Meteor's HUD, under any screen; then its click GUI.
++    if !game.hide_gui && !game.paused && !game.meteor_gui_open {
++        let r = &gfx.renderer;
++        let ping = game
++            .tab_list
++            .players
++            .get(&core.user.uuid)
++            .map(|p| p.latency);
++        let v = *game.player.velocity;
++        let info = crate::meteor::hud::HudInfo {
++            fps: gfx.fps_counter.display_fps(),
++            ping,
++            speed: (v.x * v.x + v.z * v.z).sqrt() * 20.0,
++            pos: *game.player.position,
++            dimension: &game.dimension,
++            yaw: game.player.look_dir.y_rot_deg().rem_euclid(360.0) - 180.0,
++            pitch: game.player.look_dir.x_rot_deg(),
++        };
++        crate::meteor::hud::build(&mut core.meteor, &mut elements, sw, sh, &info, &|t, s| {
++            r.menu_text_width(t, s)
++        });
++    }
++    if game.meteor_gui_open && !dialog_open {
++        let r = &gfx.renderer;
++        let keys = core.input.keys_just_pressed();
++        let frame = crate::meteor::gui::Frame {
++            sw,
++            sh,
++            cursor: core.input.cursor_pos(),
++            left_pressed: core.input.left_just_pressed(),
++            left_down: core.input.left_held(),
++            right_pressed: core.input.right_just_pressed(),
++            scroll: core.input.consume_menu_scroll(),
++            keys_pressed: &keys,
++            text_width: &|t, s| r.menu_text_width(t, s),
++        };
++        if let crate::meteor::gui::GuiAction::Close =
++            crate::meteor::gui::build(&mut core.meteor, &mut elements, &frame)
++        {
++            game.meteor_gui_open = false;
++            core.apply_cursor_grab(&gfx.window, Some(game));
++        }
++        core.input.clear_just_pressed_actions();
++    }
++
+     let mut player_preview = None;
+     let mut book_preview = None;
+     let mut screen_pointer = false;
+@@ -5622,6 +5695,15 @@ pub fn update_game(
          PauseAction::Disconnect => {
              return GameUpdateResult::ManualDisconnect;
          }
 +        PauseAction::ShowAdvancements(page) => {
 +            game.pause_screen = PauseScreen::Advancements(page);
 +        }
-+        PauseAction::ToggleIzuZoom => core.izu_zoom = !core.izu_zoom,
-+        PauseAction::ToggleIzuPing => core.izu_ping = !core.izu_ping,
++        PauseAction::OpenMeteorModules => {
++            game.paused = false;
++            game.pause_screen = PauseScreen::Main;
++            game.meteor_gui_open = true;
++            core.apply_cursor_grab(&gfx.window, Some(game));
++        }
          PauseAction::OpenBenchmark => {
              game.pause_screen = PauseScreen::Benchmark;
          }
-@@ -5652,6 +5696,7 @@ pub fn update_game(
+@@ -5652,6 +5734,7 @@ pub fn update_game(
              game.paused = false;
              core.apply_cursor_grab(&gfx.window, Some(game));
          }
@@ -1452,10 +1556,257 @@ index 4acbd34..5fa1127 100644
      match play {
          QuickPlay::Multiplayer(server) => Ok((
 diff --git a/pomme-client/src/lang.rs b/pomme-client/src/lang.rs
-index 2644848..aacb71b 100644
+index 2644848..ff377e6 100644
 --- a/pomme-client/src/lang.rs
 +++ b/pomme-client/src/lang.rs
-@@ -125,14 +125,14 @@ mod tests {
+@@ -1,4 +1,6 @@
++use std::borrow::Cow;
+ use std::collections::{HashMap, HashSet};
++use std::sync::atomic::{AtomicU32, Ordering};
+ use std::sync::{LazyLock, Mutex, RwLock};
+ 
+ use pomme_registry::builtin::ItemKind;
+@@ -6,40 +8,108 @@ use pomme_registry::builtin::ItemKind;
+ use crate::player::inventory::item_resource_name;
+ use crate::resources::{ResourceId, ResourceManager};
+ 
+-const LANG_PATH: &str = "lang/en_us.json";
++/// Vanilla's default language, which every other loads over.
++pub const DEFAULT: &str = "en_us";
+ 
+ /// Values are interned, so strings handed out before a reload stay valid.
+ static LANG: RwLock<Option<HashMap<String, &'static str>>> = RwLock::new(None);
+ 
++/// English text to its key, for [`tr`]: Pomme's menus are written in
++/// English, and a vanilla string's key finds its translation.
++static ENGLISH: RwLock<Option<HashMap<&'static str, String>>> = RwLock::new(None);
++
++/// The selected language (vanilla `options.lang`).
++static SELECTED: RwLock<String> = RwLock::new(String::new());
++
++/// Reloads asked for and not yet done; a language whose file is still
++/// downloading (the browser fetches them on first use) retries a while.
++static RELOAD_TRIES: AtomicU32 = AtomicU32::new(0);
++const RELOAD_RETRIES: u32 = 120;
++
+ /// Grows only by strings no earlier load had.
+ static INTERNED: LazyLock<Mutex<HashSet<&'static str>>> = LazyLock::new(Default::default);
+ 
+-/// Vanilla `ClientLanguage.loadFrom` for `en_us`: every namespace's stack,
+-/// lowest pack first. With no file at all (before a first-run download) the
+-/// previous table stays.
++fn intern(value: String) -> &'static str {
++    let mut interned = INTERNED.lock().unwrap_or_else(|e| e.into_inner());
++    match interned.get(value.as_str()) {
++        Some(existing) => existing,
++        None => {
++            let leaked: &'static str = Box::leak(value.into_boxed_str());
++            interned.insert(leaked);
++            leaked
++        }
++    }
++}
++
++/// The selected language's code, `en_us` until one is chosen.
++pub fn selected() -> String {
++    let selected = SELECTED.read().unwrap_or_else(|e| e.into_inner());
++    if selected.is_empty() { DEFAULT.to_owned() } else { selected.clone() }
++}
++
++/// Chooses `code` and asks for a reload ([`take_reload`]).
++pub fn select(code: &str) {
++    *SELECTED.write().unwrap_or_else(|e| e.into_inner()) = code.to_owned();
++    RELOAD_TRIES.store(RELOAD_RETRIES, Ordering::Relaxed);
++}
++
++/// Whether translations should be reloaded now: at most every quarter
++/// second while a reload is wanted, each counting a try down.
++pub fn take_reload() -> bool {
++    static LAST: Mutex<Option<web_time::Instant>> = Mutex::new(None);
++    if RELOAD_TRIES.load(Ordering::Relaxed) == 0 {
++        return false;
++    }
++    let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
++    if last.is_some_and(|t| t.elapsed() < std::time::Duration::from_millis(250)) {
++        return false;
++    }
++    *last = Some(web_time::Instant::now());
++    RELOAD_TRIES
++        .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
++        .is_ok()
++}
++
++/// Vanilla `ClientLanguage.loadFrom`: `en_us`, then the selected language
++/// over it, every namespace's stack, lowest pack first. With no file at all
++/// (before a first-run download) the previous table stays.
+ pub fn load(resources: &dyn ResourceManager) {
+-    let Some(map) = read(resources) else {
++    let Some(english) = read(resources, DEFAULT) else {
+         return;
+     };
+-    let mut interned = INTERNED.lock().unwrap_or_else(|e| e.into_inner());
+-    let table = map
+-        .into_iter()
+-        .map(|(key, value)| {
+-            let value = match interned.get(value.as_str()) {
+-                Some(existing) => *existing,
+-                None => {
+-                    let leaked: &'static str = Box::leak(value.into_boxed_str());
+-                    interned.insert(leaked);
+-                    leaked
+-                }
+-            };
+-            (key, value)
+-        })
+-        .collect();
++    let code = selected();
++    let mut table = english.clone();
++    if code != DEFAULT {
++        match read(resources, &code) {
++            Some(overlay) => {
++                tracing::info!("Language {code}: {} translations", overlay.len());
++                table.extend(overlay);
++                RELOAD_TRIES.store(0, Ordering::Relaxed);
++            }
++            // Not downloaded yet (the browser fetches objects on first use):
++            // English for now, and try again once it's in.
++            None => request_object(&format!("minecraft/lang/{code}.json")),
++        }
++    } else {
++        RELOAD_TRIES.store(0, Ordering::Relaxed);
++    }
++    let mut reverse = HashMap::with_capacity(english.len());
++    // A text several keys share takes the shortest key, which is the
++    // general one (`gui.done` over `selectWorld.edit.done`).
++    let mut keys: Vec<&String> = english.keys().collect();
++    keys.sort_by_key(|k| (k.len(), (*k).clone()));
++    for key in keys {
++        reverse
++            .entry(intern(english[key].clone()))
++            .or_insert_with(|| key.clone());
++    }
++    let table = table.into_iter().map(|(k, v)| (k, intern(v))).collect();
+     *LANG.write().unwrap_or_else(|e| e.into_inner()) = Some(table);
++    *ENGLISH.write().unwrap_or_else(|e| e.into_inner()) = Some(reverse);
+ }
+ 
+-fn read(resources: &dyn ResourceManager) -> Option<HashMap<String, String>> {
++fn read(resources: &dyn ResourceManager, code: &str) -> Option<HashMap<String, String>> {
++    let path = format!("lang/{code}.json");
+     let mut namespaces: Vec<String> = match resources.get_namespaces() {
+         Ok(namespaces) => namespaces.into_iter().collect(),
+         Err(error) => {
+@@ -53,7 +123,7 @@ fn read(resources: &dyn ResourceManager) -> Option<HashMap<String, String>> {
+     let mut translations = HashMap::new();
+     let mut found = false;
+     for namespace in namespaces {
+-        let Ok(id) = ResourceId::from_parts(&namespace, LANG_PATH) else {
++        let Ok(id) = ResourceId::from_parts(&namespace, &path) else {
+             continue;
+         };
+         let stack = match resources.get_resource_stack(&id) {
+@@ -91,6 +161,100 @@ pub fn translate(key: &str) -> Option<&'static str> {
+         .copied()
+ }
+ 
++/// English menu text in the selected language: a vanilla string by its
++/// key, and `Label: Value` text part by part. Anything without a vanilla
++/// key stays as written.
++pub fn tr(text: &str) -> Cow<'_, str> {
++    if text.is_empty() || selected() == DEFAULT {
++        return Cow::Borrowed(text);
++    }
++    let english = ENGLISH.read().unwrap_or_else(|e| e.into_inner());
++    let Some(reverse) = english.as_ref() else {
++        return Cow::Borrowed(text);
++    };
++    let lookup = |t: &str| reverse.get(t).and_then(|key| translate(key));
++    if let Some(found) = lookup(text) {
++        return Cow::Owned(found.to_owned());
++    }
++    if let Some((label, value)) = text.split_once(": ")
++        && let Some(label) = lookup(label)
++    {
++        let value = lookup(value).map_or_else(|| value.to_owned(), str::to_owned);
++        return Cow::Owned(format!("{label}: {value}"));
++    }
++    if let Some(stem) = text.strip_suffix("...")
++        && let Some(found) = lookup(stem)
++    {
++        return Cow::Owned(format!("{found}..."));
++    }
++    Cow::Borrowed(text)
++}
++
++/// One language vanilla offers: its code, name and region.
++#[derive(Clone)]
++pub struct Language {
++    pub code: String,
++    pub name: String,
++    pub region: String,
++}
++
++/// Vanilla's languages, from the `language` section of the asset index's
++/// `pack.mcmeta` (every downloaded index), sorted as `LanguageManager` does.
++pub fn languages(assets_dir: &std::path::Path) -> Vec<Language> {
++    let mut found: HashMap<String, Language> = HashMap::new();
++    let Ok(indexes) = pomme_dirs::fs::read_dir(assets_dir.join("indexes")) else {
++        return vec![english()];
++    };
++    for entry in indexes.flatten() {
++        let Ok(index) = pomme_dirs::fs::read(entry.path()) else { continue };
++        let Ok(index) = serde_json::from_slice::<serde_json::Value>(&index) else { continue };
++        let Some(hash) = index["objects"]["pack.mcmeta"]["hash"].as_str() else { continue };
++        if hash.len() < 2 {
++            continue;
++        }
++        let path = assets_dir.join("objects").join(&hash[..2]).join(hash);
++        let Ok(meta) = pomme_dirs::fs::read(&path) else { continue };
++        let Ok(meta) = serde_json::from_slice::<serde_json::Value>(&meta) else { continue };
++        let Some(languages) = meta["language"].as_object() else { continue };
++        for (code, info) in languages {
++            found.entry(code.clone()).or_insert_with(|| Language {
++                code: code.clone(),
++                name: info["name"].as_str().unwrap_or(code).to_owned(),
++                region: info["region"].as_str().unwrap_or("").to_owned(),
++            });
++        }
++    }
++    found.entry(DEFAULT.to_owned()).or_insert_with(english);
++    let mut list: Vec<Language> = found.into_values().collect();
++    list.sort_by(|a, b| a.code.cmp(&b.code));
++    list
++}
++
++/// Asks for the asset index object `key` to be downloaded.
++fn request_object(key: &str) {
++    let assets = pomme_dirs::layout().minecraft_assets();
++    let Ok(indexes) = pomme_dirs::fs::read_dir(assets.join("indexes")) else {
++        return;
++    };
++    for entry in indexes.flatten() {
++        let Ok(index) = pomme_dirs::fs::read(entry.path()) else { continue };
++        let Ok(index) = serde_json::from_slice::<serde_json::Value>(&index) else { continue };
++        if let Some(hash) = index["objects"][key]["hash"].as_str()
++            && hash.len() > 2
++        {
++            pomme_dirs::fs::request(assets.join("objects").join(&hash[..2]).join(hash));
++        }
++    }
++}
++
++fn english() -> Language {
++    Language {
++        code: DEFAULT.to_owned(),
++        name: "English".to_owned(),
++        region: "United States".to_owned(),
++    }
++}
++
+ pub fn item_display_name(kind: ItemKind) -> String {
+     let bare = item_resource_name(kind);
+     let block_key = format!("block.minecraft.{bare}");
+@@ -125,14 +289,14 @@ mod tests {
  
      fn write(root: &std::path::Path, namespace: &str, body: &str) {
          let lang = root.join(format!("assets/{namespace}/lang"));
@@ -1474,7 +1825,7 @@ index 2644848..aacb71b 100644
      }
  
 diff --git a/pomme-client/src/lib.rs b/pomme-client/src/lib.rs
-index 4fe8d97..8c84226 100644
+index 4fe8d97..7ec9085 100644
 --- a/pomme-client/src/lib.rs
 +++ b/pomme-client/src/lib.rs
 @@ -1,6 +1,7 @@
@@ -1485,7 +1836,7 @@ index 4fe8d97..8c84226 100644
  #[global_allocator]
  static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
  
-@@ -15,12 +16,15 @@ mod chat_component;
+@@ -15,12 +16,16 @@ mod chat_component;
  #[cfg(feature = "cpu-bench")]
  mod cpu_bench;
  mod dirs;
@@ -1497,11 +1848,12 @@ index 4fe8d97..8c84226 100644
  mod headless;
 +mod tasks;
  mod lang;
++mod meteor;
 +#[cfg_attr(target_arch = "wasm32", path = "logging_web.rs")]
  mod logging;
  mod mob_effect;
  mod net;
-@@ -41,6 +45,10 @@ mod update;
+@@ -41,6 +46,10 @@ mod update;
  mod user;
  mod util;
  mod version;
@@ -1512,7 +1864,7 @@ index 4fe8d97..8c84226 100644
  mod world;
  
  use std::path::PathBuf;
-@@ -68,7 +76,7 @@ fn use_bundled_moltenvk() {
+@@ -68,7 +77,7 @@ fn use_bundled_moltenvk() {
      let Some(icd) = std::env::current_exe()
          .ok()
          .and_then(|exe| Some(exe.parent()?.join("MoltenVK_icd.json")))
@@ -1521,7 +1873,7 @@ index 4fe8d97..8c84226 100644
      else {
          return;
      };
-@@ -76,6 +84,50 @@ fn use_bundled_moltenvk() {
+@@ -76,6 +85,50 @@ fn use_bundled_moltenvk() {
      unsafe { std::env::set_var("VK_ICD_FILENAMES", icd) };
  }
  
@@ -1572,7 +1924,7 @@ index 4fe8d97..8c84226 100644
  /// What differs per platform at startup.
  pub struct Platform {
      /// Replaces the per-user data directory; Android passes its app storage.
-@@ -89,6 +141,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -89,6 +142,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      // OS, so a chunk-load spike lingers; 10 ms (v2's default) returns it
      // promptly without purging on every free. The bindings don't name
      // `mi_option_purge_delay`; it is option 15 in both v2 and v3.
@@ -1580,7 +1932,7 @@ index 4fe8d97..8c84226 100644
      unsafe { libmimalloc_sys::mi_option_set(15, 10) };
      #[cfg(target_os = "macos")]
      use_bundled_moltenvk();
-@@ -119,7 +172,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -119,7 +173,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
  
      update::clean_up();
      let check_for_update = update::enabled(&args);
@@ -1589,7 +1941,7 @@ index 4fe8d97..8c84226 100644
  
      // Bare launches take the newest joinable version, skipping any staged one.
      let default_version = VERSIONS
-@@ -148,7 +201,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -148,7 +202,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      let data_dirs = args.data_dirs(version);
  
      let log_dir = data_dirs.game_dir.join("logs");
@@ -1598,7 +1950,7 @@ index 4fe8d97..8c84226 100644
      let _guard = logging::init(&log_dir);
      #[cfg(target_os = "ios")]
      for dir in [
-@@ -175,14 +228,9 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -175,14 +229,9 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      // A single connection needs only a few async workers; the default runtime
      // spawns one per core and floods them decoding the chunk-load burst, starving
      // the render/mesh threads. Cap it so those cores stay free.
@@ -1615,7 +1967,7 @@ index 4fe8d97..8c84226 100644
          let _runtime = rt.enter();
          crate::net::chat_security::ProfileKeyServices::prefetch();
      }
-@@ -192,6 +240,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -192,6 +241,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
              app::QuickPlay::Singleplayer(benchmark::bench_world(&data_dirs.game_dir, version))
          })
      });
@@ -1623,7 +1975,7 @@ index 4fe8d97..8c84226 100644
      if args.headless
          && let Some(rd) = args.chunk_bench
      {
-@@ -200,11 +249,12 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -200,11 +250,12 @@ pub fn run(args: LaunchArgs, platform: Platform) {
          std::process::exit(headless::run(rd, play, user, version, &data_dirs, &rt));
      }
  
@@ -1637,7 +1989,7 @@ index 4fe8d97..8c84226 100644
          cfg!(mobile),
      );
  
-@@ -213,7 +263,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -213,7 +264,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      #[cfg(feature = "test-harness")]
      let discord = args.harness_script.is_none();
      #[cfg(not(feature = "test-harness"))]
@@ -1646,7 +1998,7 @@ index 4fe8d97..8c84226 100644
      let presence = discord
          .then(|| {
              crate::discord::DiscordPresence::start(version)
-@@ -257,6 +307,15 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -257,6 +308,15 @@ pub fn run(args: LaunchArgs, platform: Platform) {
          });
          app = app.with_harness(harness);
      }
@@ -4270,10 +4622,20 @@ index 82997fa..be79f51 100644
  use pomme_item::ItemStack;
  
 diff --git a/pomme-client/src/ui/common.rs b/pomme-client/src/ui/common.rs
-index ff248d2..f2fd2fe 100644
+index ff248d2..2d5d7c8 100644
 --- a/pomme-client/src/ui/common.rs
 +++ b/pomme-client/src/ui/common.rs
-@@ -356,7 +356,10 @@ pub(crate) fn get_clipboard() -> String {
+@@ -147,7 +147,8 @@ pub fn push_tooltip(
+     gs: f32,
+     text: &str,
+ ) {
+-    push_tooltip_for(elements, cursor, screen_w, screen_h, gs, text, None);
++    let text = crate::lang::tr(text);
++    push_tooltip_for(elements, cursor, screen_w, screen_h, gs, &text, None);
+ }
+ 
+ /// The tooltip of the hovered widget `widget.1` tall at `widget.0`, which it
+@@ -356,7 +357,10 @@ pub(crate) fn get_clipboard() -> String {
      return unsafe { objc2_ui_kit::UIPasteboard::generalPasteboard().string() }
          .map(|text| text.to_string())
          .unwrap_or_default();
@@ -4285,7 +4647,7 @@ index ff248d2..f2fd2fe 100644
      arboard::Clipboard::new()
          .and_then(|mut cb| cb.get_text())
          .unwrap_or_default()
-@@ -376,7 +379,12 @@ pub(crate) fn set_clipboard(text: &str) -> bool {
+@@ -376,7 +380,12 @@ pub(crate) fn set_clipboard(text: &str) -> bool {
          unsafe { objc2_ui_kit::UIPasteboard::generalPasteboard().setString(Some(&text)) };
          true
      }
@@ -4299,6 +4661,23 @@ index ff248d2..f2fd2fe 100644
      match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text)) {
          Ok(()) => true,
          Err(err) => {
+@@ -1064,6 +1073,16 @@ fn push_widget_label(
+     label: WidgetLabel<'_>,
+     scroll: Option<&LabelScroll<'_>>,
+ ) {
++    // Menus are written in English; this is where a label meets the
++    // selected language.
++    let translated;
++    let label = match label {
++        WidgetLabel::Text(text, color) => {
++            translated = crate::lang::tr(text);
++            WidgetLabel::Text(&translated, color)
++        }
++        spans => spans,
++    };
+     let ty = y + (h - fs) / 2.0 + 1.0;
+     if let Some(s) = scroll {
+         let margin = 2.0 * gs;
 diff --git a/pomme-client/src/ui/container.rs b/pomme-client/src/ui/container.rs
 index 46aa026..4132ff0 100644
 --- a/pomme-client/src/ui/container.rs
@@ -4644,10 +5023,10 @@ index 7cdb244..31c2b22 100644
  
          MainMenuResult {
 diff --git a/pomme-client/src/ui/menu/credits.json b/pomme-client/src/ui/menu/credits.json
-index 416b7aa..21c48d2 100644
+index 416b7aa..099552c 100644
 --- a/pomme-client/src/ui/menu/credits.json
 +++ b/pomme-client/src/ui/menu/credits.json
-@@ -28,6 +28,17 @@
+@@ -28,6 +28,31 @@
        }
      ]
    },
@@ -4662,11 +5041,25 @@ index 416b7aa..21c48d2 100644
 +      }
 +    ]
 +  },
++  {
++    "section": "Meteor Client",
++    "disciplines": [
++      {
++        "discipline": "",
++        "titles": [
++          {
++            "title": "Source and License",
++            "names": ["MeteorDevelopment/meteor-client (GPL-3.0)"]
++          }
++        ]
++      }
++    ]
++  },
    {
      "section": "Built With",
      "disciplines": [
 diff --git a/pomme-client/src/ui/menu/helpers.rs b/pomme-client/src/ui/menu/helpers.rs
-index d86ed14..b210a6f 100644
+index d86ed14..e227ce5 100644
 --- a/pomme-client/src/ui/menu/helpers.rs
 +++ b/pomme-client/src/ui/menu/helpers.rs
 @@ -339,8 +339,8 @@ pub(super) fn push_server_status(
@@ -4680,6 +5073,15 @@ index d86ed14..b210a6f 100644
                  .unwrap_or_default()
                  .as_millis();
              let frame = match (millis / 100) % 8 {
+@@ -889,7 +889,7 @@ pub(super) fn push_screen_chrome(
+     elements.push(MenuElement::Text {
+         x: common::gui_half_width(sw, gs),
+         y: (chrome.header_h - fs) / 2.0,
+-        text: title.into(),
++        text: crate::lang::tr(title).into_owned(),
+         scale: fs,
+         color: WHITE,
+         centered: true,
 @@ -1009,6 +1009,7 @@ pub(super) fn push_footer_button(
  pub(super) enum IconFace {
      Sprite { id: SpriteId, w: f32, h: f32 },
@@ -4822,7 +5224,7 @@ index 36b0f4c..a701db6 100644
          let footer_size = 8.0 * s;
          let footer_pad = 8.0 * s;
 diff --git a/pomme-client/src/ui/menu/mod.rs b/pomme-client/src/ui/menu/mod.rs
-index 83719ef..3812ae8 100644
+index 83719ef..260d652 100644
 --- a/pomme-client/src/ui/menu/mod.rs
 +++ b/pomme-client/src/ui/menu/mod.rs
 @@ -14,7 +14,7 @@ mod worlds;
@@ -4834,7 +5236,17 @@ index 83719ef..3812ae8 100644
  
  use pomme_install::client::Channel;
  use serde::{Deserialize, Serialize};
-@@ -215,8 +215,9 @@ const CHUNK_DETAIL_MIN: u32 = 8;
+@@ -62,6 +62,9 @@ struct Settings {
+     fov: u32,
+     #[serde(default = "default_fov_effect_scale")]
+     fov_effect_scale: f32,
++    /// Vanilla `options.lang`.
++    #[serde(default = "default_lang")]
++    lang: String,
+     #[serde(default = "default_damage_tilt_strength")]
+     damage_tilt_strength: f32,
+     #[serde(default = "default_brightness")]
+@@ -215,8 +218,9 @@ const CHUNK_DETAIL_MIN: u32 = 8;
  pub const CHUNK_DETAIL_OFF: u32 = 49;
  const CHUNK_DETAIL_SPAN: f32 = (CHUNK_DETAIL_OFF - CHUNK_DETAIL_MIN) as f32;
  
@@ -4846,7 +5258,7 @@ index 83719ef..3812ae8 100644
  const DISTANT_TERRAIN_STEP: u32 = 16;
  
  /// The Distant Terrain slider step nearest `chunks`: 0 for off, else
-@@ -225,9 +226,12 @@ fn distant_terrain_step(chunks: u32) -> u32 {
+@@ -225,9 +229,12 @@ fn distant_terrain_step(chunks: u32) -> u32 {
      if chunks == 0 {
          return 0;
      }
@@ -4860,7 +5272,7 @@ index 83719ef..3812ae8 100644
  }
  
  /// The chunks Distant Terrain slider step `step` draws out to.
-@@ -235,7 +239,9 @@ fn distant_terrain_chunks(step: u32) -> u32 {
+@@ -235,10 +242,16 @@ fn distant_terrain_chunks(step: u32) -> u32 {
      if step == 0 {
          0
      } else {
@@ -4871,7 +5283,22 @@ index 83719ef..3812ae8 100644
      }
  }
  
-@@ -388,7 +394,7 @@ pub(crate) fn saved_chunk_detail(game_dir: &Path) -> u32 {
++fn default_lang() -> String {
++    crate::lang::DEFAULT.to_owned()
++}
++
+ fn default_fov_effect_scale() -> f32 {
+     1.0
+ }
+@@ -328,6 +341,7 @@ impl Default for Settings {
+             simulation_distance: 12,
+             fov: 70,
+             fov_effect_scale: 1.0,
++            lang: default_lang(),
+             damage_tilt_strength: 1.0,
+             brightness: default_brightness(),
+             sensitivity: 0.5,
+@@ -388,7 +402,7 @@ pub(crate) fn saved_chunk_detail(game_dir: &Path) -> u32 {
  
  fn load_settings(game_dir: &Path) -> Settings {
      let path = game_dir.join("options.json");
@@ -4880,7 +5307,7 @@ index 83719ef..3812ae8 100644
          .ok()
          .and_then(|s| serde_json::from_str(&s).ok())
          .unwrap_or_default()
-@@ -860,12 +866,12 @@ pub struct MainMenu {
+@@ -860,12 +874,12 @@ pub struct MainMenu {
      pending_remove: Option<(String, String)>,
      account_store: Arc<dyn pomme_auth::SecretStore>,
      sign_in: Arc<parking_lot::RwLock<account::SignIn>>,
@@ -4895,7 +5322,20 @@ index 83719ef..3812ae8 100644
      links_open: bool,
      theme_open: bool,
      /// The open title-screen dropdown's list as last drawn, which the
-@@ -1029,7 +1035,7 @@ impl MainMenu {
+@@ -931,6 +945,12 @@ pub struct MainMenu {
+     pub fov: u32,
+     /// FOV Effects slider fraction (0..1); squared by `fov_effect()`.
+     pub fov_effect_scale: f32,
++    /// The selected language's code (vanilla `options.lang`).
++    pub lang: String,
++    /// The language list's row the player picked, applied on Done.
++    lang_pick: Option<String>,
++    /// Vanilla's languages, read when the language screen opens.
++    lang_list: Vec<crate::lang::Language>,
+     pub damage_tilt_strength: f32,
+     /// The Brightness option (vanilla `gamma`), 0..1.
+     pub brightness: f32,
+@@ -1029,7 +1049,7 @@ impl MainMenu {
      pub fn new(
          game_dir: &Path,
          bedrock_dir: PathBuf,
@@ -4904,7 +5344,46 @@ index 83719ef..3812ae8 100644
          username: String,
          version: String,
          access_token: Option<String>,
-@@ -2015,14 +2021,14 @@ mod tests {
+@@ -1110,6 +1130,12 @@ impl MainMenu {
+             server_render_distance: 0,
+             fov: settings.fov,
+             fov_effect_scale: settings.fov_effect_scale,
++            lang: {
++                crate::lang::select(&settings.lang);
++                settings.lang.clone()
++            },
++            lang_pick: None,
++            lang_list: Vec::new(),
+             damage_tilt_strength: unit_range(settings.damage_tilt_strength),
+             brightness: unit_range(settings.brightness),
+             // Cubed by the look curve, so an out-of-range value reaches
+@@ -1378,6 +1404,7 @@ impl MainMenu {
+                 simulation_distance: self.simulation_distance,
+                 fov: self.fov,
+                 fov_effect_scale: self.fov_effect_scale,
++                lang: self.lang.clone(),
+                 damage_tilt_strength: self.damage_tilt_strength,
+                 brightness: self.brightness,
+                 sensitivity: self.sensitivity,
+@@ -1869,16 +1896,7 @@ impl MainMenu {
+                 self.build_options_keybinds(screen_w, screen_h, input, &text_width_fn, key_bindings)
+             }
+             Screen::OptionsLanguage => {
+-                let back = self.settings_back.clone_screen();
+-                self.build_options_stub(
+-                    screen_w,
+-                    screen_h,
+-                    input,
+-                    "Language",
+-                    back,
+-                    Some(("Font Settings...", Screen::OptionsFontSettings)),
+-                    key_bindings,
+-                )
++                self.build_options_language(screen_w, screen_h, input, &text_width_fn, key_bindings)
+             }
+             Screen::OptionsFontSettings => {
+                 self.build_options_font(screen_w, screen_h, input, &text_width_fn, key_bindings)
+@@ -2015,14 +2033,14 @@ mod tests {
      fn advanced_tooltips_survive_a_restart() {
          let dir =
              std::env::temp_dir().join(format!("pomme-advanced-tooltips-{}", std::process::id()));
@@ -4921,7 +5400,7 @@ index 83719ef..3812ae8 100644
      }
  
      #[test]
-@@ -2042,7 +2048,7 @@ mod tests {
+@@ -2042,7 +2060,7 @@ mod tests {
          assert!(menu.take_options_saved(), "a replaced options screen saves");
          menu.screen_removed(false, &key_bindings);
          assert!(!menu.take_options_saved());
@@ -4930,7 +5409,7 @@ index 83719ef..3812ae8 100644
      }
  
      #[test]
-@@ -2093,7 +2099,10 @@ mod tests {
+@@ -2093,7 +2111,10 @@ mod tests {
          assert_eq!(distant_terrain_step(0), 0);
          assert_eq!(distant_terrain_chunks(distant_terrain_step(8)), 32);
          assert_eq!(distant_terrain_chunks(distant_terrain_step(100)), 96);
@@ -4942,7 +5421,7 @@ index 83719ef..3812ae8 100644
          for step in 0..=DISTANT_TERRAIN_STEPS {
              assert_eq!(distant_terrain_step(distant_terrain_chunks(step)), step);
          }
-@@ -2112,7 +2121,7 @@ mod tests {
+@@ -2112,7 +2133,7 @@ mod tests {
      #[test]
      fn a_chunk_bench_saves_the_players_render_distance_and_reads_their_chunk_detail() {
          let dir = std::env::temp_dir().join(format!("pomme-bench-rd-{}", std::process::id()));
@@ -4951,7 +5430,7 @@ index 83719ef..3812ae8 100644
          let mut key_bindings = KeyBindings::default();
          let mut menu = test_menu(dir.to_str().unwrap(), &mut key_bindings);
          menu.render_distance = 12;
-@@ -2121,7 +2130,7 @@ mod tests {
+@@ -2121,7 +2142,7 @@ mod tests {
          menu.save_settings(&key_bindings);
          let saved = load_settings(&dir).render_distance;
          let chunk_detail = saved_chunk_detail(&dir);
@@ -4961,7 +5440,7 @@ index 83719ef..3812ae8 100644
          assert_eq!(menu.render_distance, 2);
          assert_eq!(chunk_detail, 4);
 diff --git a/pomme-client/src/ui/menu/options.rs b/pomme-client/src/ui/menu/options.rs
-index dc22568..11efd18 100644
+index dc22568..e1f2a83 100644
 --- a/pomme-client/src/ui/menu/options.rs
 +++ b/pomme-client/src/ui/menu/options.rs
 @@ -2336,10 +2336,11 @@ impl MainMenu {
@@ -4977,7 +5456,128 @@ index dc22568..11efd18 100644
              let _ = open::that_detached(&self.packs_dir);
          }
  
-@@ -2455,13 +2456,13 @@ impl MainMenu {
+@@ -2370,6 +2371,120 @@ impl MainMenu {
+     }
+ 
+     #[allow(clippy::too_many_arguments)]
++    /// Vanilla `LanguageSelectScreen`: every language as `Name (Region)`,
++    /// the selected one outlined; Done applies the pick, Escape drops it.
++    pub(super) fn build_options_language(
++        &mut self,
++        sw: f32,
++        sh: f32,
++        input: &MenuInput,
++        text_width: &dyn Fn(&str, f32) -> f32,
++        key_bindings: &KeyBindings,
++    ) -> MainMenuResult {
++        let back = self.settings_back.clone_screen();
++        if input.escape {
++            self.lang_pick = None;
++            self.lang_list.clear();
++            self.set_screen(back, key_bindings);
++            return empty_result();
++        }
++        if self.lang_list.is_empty() {
++            self.lang_list = crate::lang::languages(&pomme_dirs::layout().minecraft_assets());
++        }
++        let gs = self.gui_scale(sw, sh);
++        let cx = sw / 2.0;
++        let mut elements = vec![MenuElement::BlurBackground];
++        let mut any_hovered = false;
++        let chrome = push_screen_chrome(&mut elements, sw, sh, gs, &crate::lang::tr("Language"));
++
++        // `LanguageSelectionList`: 18 tall rows, centered labels.
++        let row_h = 18.0 * gs;
++        let fs = 8.0 * gs;
++        // The footer holds the accuracy warning above the buttons.
++        let list_y = chrome.content_top;
++        let list_h = (chrome.content_bottom - list_y - 14.0 * gs).max(row_h);
++        let total_h = self.lang_list.len() as f32 * row_h + 4.0 * gs;
++        let (row_cursor, row_clicked) = self.scroll_list(input, sw, list_y, list_h, total_h, row_h);
++        let current = self.lang_pick.clone().unwrap_or_else(|| self.lang.clone());
++        let row_w = 220.0 * gs;
++        elements.push(MenuElement::ScissorPush { x: 0.0, y: list_y, w: sw, h: list_h });
++        for (i, language) in self.lang_list.iter().enumerate() {
++            let y = list_y + 2.0 * gs + i as f32 * row_h - self.scroll_offset;
++            if y + row_h < list_y || y > list_y + list_h {
++                continue;
++            }
++            let rect = [cx - row_w / 2.0, y, row_w, row_h];
++            let hovered = common::hit_test(row_cursor, rect);
++            any_hovered |= hovered;
++            if language.code == current {
++                // `AbstractSelectionList.renderSelection`: a white outline.
++                elements.push(MenuElement::Rect { x: rect[0], y, w: row_w, h: row_h, corner_radius: 0.0, color: [1.0, 1.0, 1.0, 1.0] });
++                elements.push(MenuElement::Rect { x: rect[0] + gs, y: y + gs, w: row_w - 2.0 * gs, h: row_h - 2.0 * gs, corner_radius: 0.0, color: [0.0, 0.0, 0.0, 1.0] });
++            }
++            let label = if language.region.is_empty() {
++                language.name.clone()
++            } else {
++                format!("{} ({})", language.name, language.region)
++            };
++            elements.push(MenuElement::Text {
++                x: cx,
++                y: y + (row_h - fs) / 2.0,
++                text: label,
++                scale: fs,
++                color: if hovered { [1.0, 1.0, 0.6, 1.0] } else { [1.0, 1.0, 1.0, 1.0] },
++                centered: true,
++            });
++            if hovered && row_clicked {
++                self.lang_pick = Some(language.code.clone());
++            }
++        }
++        elements.push(MenuElement::ScissorPop);
++        let _ = text_width;
++
++        // `options.languageAccuracyWarning`, gray, above the footer buttons.
++        let warning = crate::lang::translate("options.languageAccuracyWarning")
++            .unwrap_or("(Language translations may not be 100% accurate)");
++        elements.push(MenuElement::Text {
++            x: cx,
++            y: chrome.content_bottom - 11.0 * gs,
++            // A format string: `%%` is a literal percent.
++            text: warning.replace("%%", "%"),
++            scale: fs,
++            color: [0.66, 0.66, 0.66, 1.0],
++            centered: true,
++        });
++
++        self.focus_advance(input);
++        let mut ctx = self.make_focus_ctx(input);
++        let (w, gap) = (FOOTER_PAIR_W * gs, FOOTER_PAIR_GAP * gs);
++        let x = cx - w - gap / 2.0;
++        let font_label = crate::lang::tr("Font Settings...").into_owned();
++        let done_label = crate::lang::tr("Done").into_owned();
++        let font = push_footer_button(&mut elements, &mut ctx, &mut any_hovered, input, &chrome, x, w, gs, &font_label, true);
++        let done = push_footer_button(&mut elements, &mut ctx, &mut any_hovered, input, &chrome, x + w + gap, w, gs, &done_label, true);
++        self.finish_focus(&ctx);
++        if font {
++            self.set_screen(Screen::OptionsFontSettings, key_bindings);
++        } else if done {
++            tracing::info!("Language screen done, picked {:?}", self.lang_pick);
++            if let Some(code) = self.lang_pick.take()
++                && code != self.lang
++            {
++                self.lang = code;
++                crate::lang::select(&self.lang);
++                self.save_settings(key_bindings);
++            }
++            self.lang_list.clear();
++            self.set_screen(back, key_bindings);
++        }
++        MainMenuResult {
++            elements,
++            action: MenuAction::None,
++            cursor_pointer: any_hovered,
++            clicked_button: ctx.fired,
++        }
++    }
++
+     pub(super) fn build_options_stub(
+         &mut self,
+         sw: f32,
+@@ -2455,13 +2570,13 @@ impl MainMenu {
  /// The pack after `current` in `dir` (folders and zips, by name), wrapping
  /// through off.
  fn next_shader_pack(dir: &std::path::Path, current: Option<&str>) -> Option<String> {
@@ -4993,7 +5593,7 @@ index dc22568..11efd18 100644
                  || path
                      .extension()
                      .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
-@@ -2925,17 +2926,17 @@ mod tests {
+@@ -2925,17 +3040,17 @@ mod tests {
      /// A grid whose options save to a folder of its own, gone with the guard.
      fn saving_grid(left: &'static str) -> (Grid, impl Drop) {
          let dir = std::env::temp_dir().join(format!("pomme-options-{}", uuid::Uuid::new_v4()));
@@ -5048,7 +5648,7 @@ index 324f669..afaa2c0 100644
  
      #[test]
 diff --git a/pomme-client/src/ui/menu/title_screen.rs b/pomme-client/src/ui/menu/title_screen.rs
-index 7ba3ece..34ea2c0 100644
+index 7ba3ece..25a3156 100644
 --- a/pomme-client/src/ui/menu/title_screen.rs
 +++ b/pomme-client/src/ui/menu/title_screen.rs
 @@ -54,9 +54,8 @@ impl MainMenu {
@@ -5072,7 +5672,26 @@ index 7ba3ece..34ea2c0 100644
          let icon_x0 = cx - row_w / 2.0 * gs;
          // Signed out, Friends opens the sign-in screen instead.
          let signed_in = self.access_token.is_some();
-@@ -192,6 +191,15 @@ impl MainMenu {
+@@ -153,8 +152,7 @@ impl MainMenu {
+                     "Sign in to use friends"
+                 },
+             ),
+-            // TODO: no language selection yet.
+-            (SpriteId::IconLanguage, false, "Change Language"),
++            (SpriteId::IconLanguage, true, "Change Language"),
+             (SpriteId::IconAccessibility, true, "Accessibility Settings"),
+         ];
+         for (i, (sprite, enabled, tip)) in icons.iter().enumerate() {
+@@ -187,11 +185,24 @@ impl MainMenu {
+                         self.settings_back = Screen::Main;
+                         self.set_screen(Screen::OptionsAccessibility, key_bindings);
+                     }
++                    SpriteId::IconLanguage => {
++                        self.settings_back = Screen::Main;
++                        self.set_screen(Screen::OptionsLanguage, key_bindings);
++                    }
+                     _ => {}
+                 }
              }
          }
  
@@ -5088,7 +5707,7 @@ index 7ba3ece..34ea2c0 100644
          let bottom_y = base + 4.0 * ROW_SPACING * gs;
          let half_w = HALF_W * gs;
          if push_button_f(
-@@ -229,39 +237,6 @@ impl MainMenu {
+@@ -229,39 +240,6 @@ impl MainMenu {
              action = MenuAction::Quit;
          }
  
@@ -5128,7 +5747,7 @@ index 7ba3ece..34ea2c0 100644
          let footer_y = screen_h - FOOTER_OFFSET * gs;
          elements.push(MenuElement::Text {
              x: 2.0 * gs,
-@@ -303,35 +278,6 @@ impl MainMenu {
+@@ -303,35 +281,6 @@ impl MainMenu {
              }
          }
  
@@ -5254,56 +5873,44 @@ index 98f5d8f..b438db2 100644
          }
          y += btn_h + spacing;
 diff --git a/pomme-client/src/ui/pause.rs b/pomme-client/src/ui/pause.rs
-index 1090b90..4151fff 100644
+index 1090b90..1830b18 100644
 --- a/pomme-client/src/ui/pause.rs
 +++ b/pomme-client/src/ui/pause.rs
-@@ -14,6 +14,8 @@ pub enum PauseScreen {
+@@ -14,6 +14,7 @@ pub enum PauseScreen {
      #[default]
      Main,
      Benchmark,
 +    Advancements(usize),
-+    IzuModules,
      ChunkLoader,
      /// F3+Esc: paused with no menu rendered (vanilla `pauseGame(true)`).
      Hidden,
-@@ -26,6 +28,10 @@ pub enum PauseAction {
+@@ -26,6 +27,9 @@ pub enum PauseAction {
      Disconnect,
      Options,
      ReportBugs,
 +    GiveFeedback,
 +    ShowAdvancements(usize),
-+    ToggleIzuZoom,
-+    ToggleIzuPing,
++    OpenMeteorModules,
      OpenBenchmark,
      StartFpsBenchmark,
      OpenChunkLoader,
-@@ -44,6 +50,9 @@ pub fn build_pause_menu(
+@@ -44,6 +48,7 @@ pub fn build_pause_menu(
      screen: PauseScreen,
      server_rd: u32,
      singleplayer: bool,
 +    toasts: &crate::ui::toast::ToastState,
-+    izu_zoom: bool,
-+    izu_ping: bool,
  ) -> PauseAction {
      match screen {
          // The F3+Esc pause renders nothing; update_game skips building it.
-@@ -57,6 +66,15 @@ pub fn build_pause_menu(
+@@ -57,6 +62,7 @@ pub fn build_pause_menu(
              gs,
              singleplayer,
          ),
 +        PauseScreen::Advancements(page) => build_advancements(elements, screen_w, screen_h, cursor, clicked, gs, toasts, page),
-+        PauseScreen::IzuModules => build_submenu(
-+            elements, screen_w, screen_h, cursor, clicked, gs, "Izu Modules", None,
-+            &[
-+                (if izu_zoom { "Zoom: ON" } else { "Zoom: OFF" }, PauseAction::ToggleIzuZoom),
-+                (if izu_ping { "Ping: ON" } else { "Ping: OFF" }, PauseAction::ToggleIzuPing),
-+                ("Done", PauseAction::Resume),
-+            ],
-+        ),
          PauseScreen::Benchmark => build_submenu(
              elements,
              screen_w,
-@@ -157,7 +175,7 @@ fn build_main(
+@@ -157,7 +163,7 @@ fn build_main(
          action = PauseAction::Resume;
      }
  
@@ -5312,29 +5919,41 @@ index 1090b90..4151fff 100644
          elements,
          cursor,
          col1_x,
-@@ -167,8 +185,10 @@ fn build_main(
+@@ -167,9 +173,11 @@ fn build_main(
          gs,
          fs,
          "Advancements",
 -        false,
 -    );
+-    common::push_button(
 +        true,
 +    ) && clicked {
 +        action = PauseAction::ShowAdvancements(0);
 +    }
-     common::push_button(
++    if common::push_button(
          elements,
          cursor,
-@@ -182,7 +202,7 @@ fn build_main(
-         false,
-     );
+         col2_x,
+@@ -178,11 +186,14 @@ fn build_main(
+         btn_h,
+         gs,
+         fs,
+-        "Statistics",
+-        false,
+-    );
++        "Meteor Client",
++        true,
++    ) && clicked
++    {
++        action = PauseAction::OpenMeteorModules;
++    }
  
 -    common::push_button(
 +    if common::push_button(
          elements,
          cursor,
          col1_x,
-@@ -192,8 +212,11 @@ fn build_main(
+@@ -192,8 +203,11 @@ fn build_main(
          gs,
          fs,
          "Give Feedback",
@@ -5348,7 +5967,7 @@ index 1090b90..4151fff 100644
      if common::push_button(
          elements,
          cursor,
-@@ -326,3 +349,54 @@ fn build_submenu(
+@@ -326,3 +340,54 @@ fn build_submenu(
  
      action
  }
@@ -6710,10 +7329,10 @@ index ac1e710..dc683cc 100644
      let mut archive =
          zip::ZipArchive::new(std::io::Cursor::new(jar)).map_err(|e| format!("Client jar: {e}"))?;
 diff --git a/pomme-relay/Cargo.toml b/pomme-relay/Cargo.toml
-index 47025a4..03eb490 100644
+index 47025a4..2d43fe3 100644
 --- a/pomme-relay/Cargo.toml
 +++ b/pomme-relay/Cargo.toml
-@@ -6,14 +6,19 @@ edition = "2024"
+@@ -6,15 +6,20 @@ edition = "2024"
  license = "GPL-3.0-or-later"
  publish = false
  
@@ -6730,10 +7349,12 @@ index 47025a4..03eb490 100644
  hickory-resolver = { version = "0.26", features = ["tokio", "system-config"] }
  reqwest = { workspace = true, features = ["stream"] }
 -tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
+-tower-http = { version = "0.7", features = ["fs"] }
 +tokio = { workspace = true, features = ["full"] }
- tower-http = { version = "0.7", features = ["fs"] }
++tower-http = { version = "0.7", features = ["fs", "set-header"] }
  tracing = { workspace = true }
  tracing-subscriber = { workspace = true, features = ["env-filter"] }
+ 
 diff --git a/pomme-relay/src/connect.rs b/pomme-relay/src/connect.rs
 index 3a35274..2489d7b 100644
 --- a/pomme-relay/src/connect.rs
@@ -6758,7 +7379,7 @@ index 3a35274..2489d7b 100644
      let charged = |bytes: usize| limits.relayed(client, bytes + MESSAGE_COST);
      let sent = tokio::time::timeout(HANDSHAKE_WAIT, opening(&mut from_page, charged));
 diff --git a/pomme-relay/src/main.rs b/pomme-relay/src/main.rs
-index 7c52164..de76006 100644
+index 7c52164..0001d39 100644
 --- a/pomme-relay/src/main.rs
 +++ b/pomme-relay/src/main.rs
 @@ -1,7 +1,7 @@
@@ -6836,7 +7457,7 @@ index 7c52164..de76006 100644
  }
  
  async fn serve(listener: TcpListener, app: Router) {
-@@ -135,7 +158,12 @@ async fn serve(listener: TcpListener, app: Router) {
+@@ -135,10 +158,21 @@ async fn serve(listener: TcpListener, app: Router) {
  
  /// The routes, with the page in `dir` served for everything else.
  fn app(state: AppState, dir: &Path) -> Router {
@@ -6849,7 +7470,17 @@ index 7c52164..de76006 100644
 +    routes
          .nest("/relay", Router::new().fallback(any(relay::relay)))
          .route("/connect/{host}/{port}", get(connect::connect))
-         .fallback_service(ServeDir::new(dir))
+-        .fallback_service(ServeDir::new(dir))
++        // Revalidated on every load, so a rebuilt page is never mixed with a
++        // cached one; unchanged files still come back as 304s.
++        .fallback_service(tower_http::set_header::SetResponseHeader::overriding(
++            ServeDir::new(dir),
++            axum::http::header::CACHE_CONTROL,
++            axum::http::HeaderValue::from_static("no-cache"),
++        ))
+         .layer(axum::middleware::from_fn_with_state(
+             state.clone(),
+             guard::guard,
 diff --git a/pomme-singleplayer/Cargo.toml b/pomme-singleplayer/Cargo.toml
 index 8c92226..2b9c0e1 100644
 --- a/pomme-singleplayer/Cargo.toml

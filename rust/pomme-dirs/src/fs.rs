@@ -28,6 +28,10 @@ pub fn is_file(path: impl AsRef<Path>) -> bool {
     path.as_ref().is_file()
 }
 
+/// Asks for `path` to be loaded in the background; on desktop it's on disk.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn request(_path: impl AsRef<Path>) {}
+
 #[cfg(target_arch = "wasm32")]
 pub use memory::*;
 
@@ -364,6 +368,16 @@ mod memory {
     pub fn metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {
         let path = normal(path.as_ref());
         tree().get(&path).map(metadata_of).ok_or_else(|| not_found(&path))
+    }
+
+    /// Asks the page to load `path` in the background, if it can.
+    pub fn request(path: impl AsRef<Path>) {
+        let path = normal(path.as_ref());
+        if !tree().contains_key(&path)
+            && let Some(fetch) = FETCH.get()
+        {
+            fetch(&path);
+        }
     }
 
     pub fn symlink_metadata(path: impl AsRef<Path>) -> io::Result<Metadata> {

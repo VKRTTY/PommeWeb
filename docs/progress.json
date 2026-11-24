@@ -196,6 +196,31 @@
           "done": 0
         }
       ]
+    },
+    {
+      "name": "Meteor Client",
+      "items": [
+        {
+          "name": "Module catalog",
+          "total": 1,
+          "done": 1
+        },
+        {
+          "name": "Click GUI",
+          "total": 1,
+          "done": 1
+        },
+        {
+          "name": "HUD",
+          "total": 1,
+          "done": 1
+        },
+        {
+          "name": "Behavior (169 modules)",
+          "total": 169,
+          "done": 5
+        }
+      ]
     }
   ]
 }

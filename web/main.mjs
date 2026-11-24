@@ -1,6 +1,9 @@
 // Shows vanilla's red loading screen while the game downloads, then starts
 // the game on the page's canvas.
-import init, {start} from './pomme.js';
+// The build's id (build.sh writes it), so a new build is never mixed with a
+// cached old one.
+const build = await fetch('./build.txt', {cache: 'no-store'}).then(r => r.ok ? r.text() : '', () => '');
+const {default: init, start} = await import(`./pomme.js?v=${build.trim()}`);
 import {assetFind} from './asset-storage.mjs';
 
 const loading = document.getElementById('loading');
@@ -143,7 +146,7 @@ async function download(url) {
 
 try {
   await relayRequests();
-  const wasm = await download(new URL('./pomme_bg.wasm', import.meta.url));
+  const wasm = await download(new URL(`./pomme_bg.wasm?v=${build.trim()}`, import.meta.url));
   say('Starting...');
   await init({module_or_path: wasm});
   // The page's screen stays over the canvas until the game is at its menu,

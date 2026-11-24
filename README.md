@@ -18,57 +18,64 @@
 
 > [!NOTE]
 > **It plays in the browser.** Pomme's own renderer draws the menus and the
-> world in Chrome through WebGPU, and joins servers through `pomme-relay`.
-> Local singleplayer uses the same integrated SteelMC server as desktop.
-> Microsoft sign-in and distant terrain are still in progress.
+> world in Chrome through WebGPU, joins servers through `pomme-relay`, and
+> plays local singleplayer worlds on the same SteelMC server as desktop.
+> The **Meteor Client** port is under way (see below). Microsoft sign-in
+> and distant terrain are still in progress.
 
 ## Screenshots
 
 <table>
 <tr>
-<td colspan="2"><img src="docs/screenshots/singleplayer-gameplay.png" alt="A singleplayer world created and played in Chrome"></td>
+<td colspan="2"><img src="docs/screenshots/singleplayer-gameplay.png" alt="A singleplayer world played in Chrome"></td>
 </tr>
 <tr>
-<td colspan="2"><img src="docs/screenshots/gameplay-third-person.png" alt="Gameplay in Chrome"></td>
+<td><img src="docs/screenshots/title-menu.png" alt="Title menu with the panorama"></td>
+<td><img src="docs/screenshots/gameplay-third-person.png" alt="Third-person gameplay"></td>
 </tr>
 <tr>
-<td><img src="docs/screenshots/loading-install.png" alt="First-run loading screen"></td>
 <td><img src="docs/screenshots/loading-mojang.png" alt="Loading screen"></td>
+<td><img src="docs/screenshots/loading-install.png" alt="First-run install progress"></td>
 </tr>
 <tr>
-<td colspan="2"><img src="docs/screenshots/title-menu.png" alt="Title menu in Chrome"></td>
-</tr>
-<tr>
-<td><img src="docs/screenshots/menu-03-multiplayer.png" alt="Multiplayer screen"></td>
-<td><img src="docs/screenshots/menu-04-options.png" alt="Options screen"></td>
-</tr>
-<tr>
-<td colspan="2"><img src="docs/screenshots/menu-02-singleplayer.png" alt="Create New World screen"></td>
+<td><img src="docs/screenshots/menu-03-multiplayer.png" alt="Multiplayer"></td>
+<td><img src="docs/screenshots/menu-04-options.png" alt="Options"></td>
 </tr>
 </table>
 
-## Optional HUD
+## Features
 
-Press **Shift+6** while in a world to toggle the IzuClient-inspired HUD.
-It displays FPS in local and multiplayer sessions, and coordinates in
-singleplayer. This is a Rust implementation inspired by [IzuClient](https://github.com/izumihd/IzuClient), not a port of its Java modules.
+| | |
+|---|---|
+| **Renderer** | Pomme's own, on WebGPU: world, entities, HUD, menus with background blur |
+| **Play** | Local singleplayer worlds, and any offline-mode Java server through the relay |
+| **Loading** | Vanilla's red Mojang Studios screen in the Minecraft font; the game downloads once and starts in seconds after |
+| **Storage** | Game files, worlds and settings kept in the browser (IndexedDB) |
+| **Sound** | Web Audio; sounds download the first time they play |
+| **Meteor Client** | Module system, click GUI and HUD in Meteor's theme (below) |
 
-![Optional HUD in a local world](docs/screenshots/izu-hud.png)
+## Meteor Client port
 
-## Roadmap
+A port of [Meteor Client](https://github.com/MeteorDevelopment/meteor-client)
+(GPL-3.0, by MeteorDevelopment) to Pomme. PommeWeb is GPL-3.0 too, and Meteor's
+license and notices stay with the code derived from it.
 
-- [x] Shaders converted to WGSL at build time — all 74 accepted by Chrome
-- [x] Server connections through `pomme-relay` over WebSocket
-- [x] Web Audio playback
-- [x] Browser task runtime and console logging
-- [x] WebGPU graphics backend
-- [x] Browser entry point and game files loaded over the network
-- [x] **Milestone 1:** loading screen and title menu
-- [x] Server list and joining a server
-- [x] **Milestone 2:** world rendering and gameplay
-- [x] Local singleplayer via the loopback relay
-- [ ] Distant terrain
-- [ ] Microsoft account sign-in
+Press **Right Shift** in a world, or use **Meteor Client** on the pause menu.
+
+- **Same modules, settings and defaults.** All 169 modules (Combat 30, Player
+  31, Movement 30, Render 38, World 24, Misc 16) and their 1,407 settings come
+  straight from Meteor's source, by `scripts/meteor-extract.py`, so names,
+  descriptions, defaults, ranges and options match.
+- **Same GUI.** Meteor's theme colors and layout: the tab bar, a draggable
+  window per category with the accent header, left-click to toggle,
+  right-click for settings, sliders, dropdowns, binds, favorites and tooltips.
+  Window positions and every setting persist.
+- **Same HUD.** The default Meteor HUD: watermark, FPS, ping, speed, the
+  rainbow active-modules list, position, opposite-dimension position and
+  rotation.
+- **Behavior is ported module by module.** Working now: Fullbright, Zoom,
+  Sprint, Auto Walk and Auto Jump. The rest keep their settings but don't act
+  yet; the full status is in [HANDOFF.md](HANDOFF.md).
 
 ## How it works
 

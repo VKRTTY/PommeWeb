@@ -34,5 +34,6 @@ BINDGEN="$HERE/tools/wasm-bindgen"
 "$BINDGEN" --target web --no-typescript --out-dir "$DIST" --out-name pomme \
   "$REPO/target/wasm32-unknown-unknown/$PROFILE/pomme_client.wasm"
 cp "$HERE"/web/*.mjs "$HERE"/web/*.js "$HERE"/web/index.html "$DIST"/
+date +%s > "$DIST/build.txt"
 rm -f "$DIST"/*.test.mjs
 echo "Built $DIST"
