@@ -178,6 +178,11 @@ domain and port; the container serves the built browser client and relay.
 The hosted relay only connects to public game servers. Local singleplayer
 continues to use `./play.sh` on your own machine.
 
+The GitHub Actions workflow deploys pushes to `main`. Configure a project-scoped
+Railway token as the repository Actions secret `RAILWAY_TOKEN`, and add
+`RAILWAY_PROJECT_ID`, `RAILWAY_ENVIRONMENT_ID`, and `RAILWAY_SERVICE_ID` as
+repository Actions variables.
+
 ## License
 
 GPL-3.0-or-later, as Pomme is. See [LICENSE](LICENSE).
