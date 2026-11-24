@@ -86,6 +86,12 @@ This repo holds only the web code; it builds against a Pomme checkout.
 
 ## Play
 
+**One command:** `./play.sh` builds the page if needed, starts the relay and a
+local offline server, and opens Chrome. Continuing the port? Start with
+[HANDOFF.md](HANDOFF.md).
+
+By hand:
+
 1. Build it and start the relay (below), then open **http://127.0.0.1:8460**
    in Chrome or Edge.
 2. The first visit downloads the game files from Mojang (about 50 MB) behind
