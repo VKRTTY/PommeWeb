@@ -42,6 +42,11 @@ pub async fn init() -> Result<(), JsValue> {
         entries.length() / 2,
         bytes_total as f64 / 1048576.0
     );
+    let assets = pomme_dirs::layout().minecraft_assets();
+    match pomme_install::web::preload_eager(&assets).await {
+        Ok(count) => tracing::info!("Loaded {count} stored asset objects"),
+        Err(e) => tracing::warn!("Couldn't load stored asset objects: {e}"),
+    }
     pomme_dirs::fs::set_persist(persist);
     pomme_dirs::fs::set_fetch(fetch);
     Ok(())

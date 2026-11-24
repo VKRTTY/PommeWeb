@@ -41,18 +41,20 @@ pub(super) async fn exists(path: &Path) -> Result<bool, String> {
     Ok(value.as_bool().unwrap_or(false))
 }
 
-/// Stores `bytes` at `path`, and puts them in the game's file tree too
-/// unless they're an asset object: those, mostly sounds, load when first
-/// read.
+/// Stores `bytes` at `path`, and puts them in the game's file tree too.
 pub(super) async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let key = path.to_string_lossy();
     JsFuture::from(write(&key, &Uint8Array::from(bytes)).map_err(reason)?)
         .await
         .map_err(reason)?;
-    if !is_object(&key) {
-        pomme_dirs::fs::preload(path, bytes.to_vec());
-    }
+    pomme_dirs::fs::preload(path, bytes.to_vec());
     Ok(())
+}
+
+/// Whether the asset index's `key` is one the browser keeps loaded from the
+/// start: anything but sounds and translations, which load when first read.
+pub fn eager_object(key: &str) -> bool {
+    !key.starts_with("minecraft/sounds/") && !key.starts_with("minecraft/lang/")
 }
 
 /// Whether a stored path is one of the asset index's objects.
@@ -98,4 +100,40 @@ pub async fn fetch_object(http: &reqwest::Client, path: &Path) -> Result<Vec<u8>
     let bytes = super::fetch_verified(http, &url, hash, super::Hash::Sha1).await?;
     write_atomic(path, &bytes).await?;
     Ok(bytes)
+}
+
+/// Puts the stored eager objects ([`eager_object`]) of every downloaded
+/// asset index under `assets_dir` into the game's file tree; the page's
+/// preload leaves objects out.
+pub async fn preload_eager(assets_dir: &Path) -> Result<usize, String> {
+    #[derive(serde::Deserialize)]
+    struct Index {
+        objects: std::collections::HashMap<String, Object>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Object {
+        hash: String,
+    }
+    let Ok(indexes) = pomme_dirs::fs::read_dir(assets_dir.join("indexes")) else {
+        return Ok(0);
+    };
+    let mut loaded = 0;
+    for entry in indexes.flatten() {
+        let Ok(bytes) = pomme_dirs::fs::read(entry.path()) else { continue };
+        let Ok(index) = serde_json::from_slice::<Index>(&bytes) else { continue };
+        for (key, object) in index.objects {
+            if !eager_object(&key) || object.hash.len() < 2 {
+                continue;
+            }
+            let path = assets_dir.join("objects").join(&object.hash[..2]).join(&object.hash);
+            if pomme_dirs::fs::exists(&path) {
+                continue;
+            }
+            if let Some(bytes) = read_asset(&path).await? {
+                pomme_dirs::fs::preload(&path, bytes);
+                loaded += 1;
+            }
+        }
+    }
+    Ok(loaded)
 }
