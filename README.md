@@ -62,6 +62,13 @@ license and notices stay with the code derived from it.
 
 Press **Right Shift** in a world, or use **Meteor Client** on the pause menu.
 
+<table>
+<tr>
+<td><img src="docs/screenshots/meteor-gui.png" alt="Meteor's click GUI in the browser"></td>
+<td><img src="docs/screenshots/meteor-hud.png" alt="Meteor's HUD in the browser"></td>
+</tr>
+</table>
+
 - **Same modules, settings and defaults.** All 169 modules (Combat 30, Player
   31, Movement 30, Render 38, World 24, Misc 16) and their 1,407 settings come
   straight from Meteor's source, by `scripts/meteor-extract.py`, so names,
@@ -73,8 +80,9 @@ Press **Right Shift** in a world, or use **Meteor Client** on the pause menu.
 - **Same HUD.** The default Meteor HUD: watermark, FPS, ping, speed, the
   rainbow active-modules list, position, opposite-dimension position and
   rotation.
-- **Behavior is ported module by module.** Working now: Fullbright, Zoom,
-  Sprint, Auto Walk and Auto Jump. The rest keep their settings but don't act
+- **Behavior is ported module by module.** Working now: Fullbright, Zoom
+  (smoothing, scroll, cinematic), Sprint, Auto Walk, Auto Jump, Step, Reach,
+  Velocity, Jesus, Fast Climb, Flight, High Jump and No Fall. The rest keep their settings but don't act
   yet; the full status is in [HANDOFF.md](HANDOFF.md).
 
 ## How it works

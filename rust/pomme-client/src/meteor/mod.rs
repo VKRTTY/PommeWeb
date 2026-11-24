@@ -81,7 +81,10 @@ pub static CATALOG: LazyLock<Catalog> = LazyLock::new(|| {
 
 /// Modules whose behavior has been ported; the rest show and save their
 /// settings like Meteor's but don't act yet.
-pub const PORTED: &[&str] = &["fullbright", "zoom", "sprint", "auto-walk", "auto-jump"];
+pub const PORTED: &[&str] = &[
+    "fullbright", "zoom", "sprint", "auto-walk", "auto-jump", "step", "reach", "velocity",
+    "jesus", "fast-climb", "flight", "high-jump", "no-fall",
+];
 
 /// One module's state.
 #[derive(Clone, Default)]
@@ -96,12 +99,19 @@ pub struct ModuleState {
     pub values: HashMap<(String, String), Value>,
 }
 
+/// `Zoom`'s running state: the zoom reached and the easing time.
+pub struct ZoomState {
+    pub value: f64,
+    pub time: f64,
+}
+
 pub struct MeteorClient {
     pub modules: Vec<ModuleState>,
     by_name: HashMap<&'static str, usize>,
     path: PathBuf,
     pub gui: gui::GuiState,
     pub hud: hud::HudState,
+    pub zoom: ZoomState,
     /// What changed since the last save.
     dirty: bool,
     /// Toggles to announce in chat (Meteor's chat feedback).
@@ -138,6 +148,7 @@ impl MeteorClient {
             path,
             gui,
             hud: hud::HudState::default(),
+            zoom: ZoomState { value: 1.0, time: 0.0 },
             dirty: false,
             feedback: Vec::new(),
         }
