@@ -1,5 +1,5 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index e6250f3..35808fb 100644
+index e6250f3..ace4921 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -3083,6 +3083,7 @@ dependencies = [
@@ -84,15 +84,17 @@ index e6250f3..35808fb 100644
   "zip 9.4.1",
  ]
  
-@@ -4245,6 +4265,7 @@ dependencies = [
+@@ -4245,7 +4265,9 @@ dependencies = [
   "futures-util",
   "hickory-resolver",
   "pomme-protocol",
 + "pomme-singleplayer",
   "reqwest",
++ "socket2",
   "tokio",
   "tokio-tungstenite 0.30.0",
-@@ -5357,8 +5378,6 @@ dependencies = [
+  "tower",
+@@ -5357,8 +5379,6 @@ dependencies = [
  [[package]]
  name = "simdnbt"
  version = "0.10.0"
@@ -101,7 +103,7 @@ index e6250f3..35808fb 100644
  dependencies = [
   "byteorder",
   "flate2",
-@@ -5998,6 +6017,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+@@ -5998,6 +6018,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
  checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
  dependencies = [
   "deranged",
@@ -457,7 +459,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index c5b3441..fe22cee 100644
+index c5b3441..388b052 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -582,16 +584,33 @@ index c5b3441..fe22cee 100644
          let fov_effect_scale = self.menu.fov_effect();
          renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
          // TODO: lava camera fluid (no eyes_in_lava).
-@@ -4422,6 +4432,8 @@ impl AppCore {
+@@ -4408,6 +4418,12 @@ impl AppCore {
+             jumpable: game.riding_jumpable_vehicle(),
+         });
+         let extra_boxes = game.collidable_player_boxes();
++        let player_id = game.player.entity_id;
++        game.player.firework_boosts = game
++            .non_living_store
++            .entities()
++            .filter(|(_, e)| e.attached_entity_id == Some(player_id))
++            .count() as u32;
+         movement::tick(
+             &mut game.player,
+             input,
+@@ -4422,6 +4438,12 @@ impl AppCore {
              game.interaction.slow_due_to_using_item(),
              vehicle,
          );
++        // `LocalPlayer.aiStep`: a started glide sends START_FALL_FLYING.
++        if std::mem::take(&mut game.player.start_fall_flying_pending) {
++            self.send_player_command(connection, game, PlayerCommand::StartFallFlying);
++        }
 +        crate::meteor::ported::tick(&mut self.meteor, input, game);
 +        crate::meteor::modules::tick(&mut self.meteor, input, game, &connection.packet_tx);
          let dx = game.player.position.x - game.player.prev_position.x;
          let dz = game.player.position.z - game.player.prev_position.z;
          crate::entity::update_walk_animation(
-@@ -4619,20 +4631,29 @@ impl AppCore {
+@@ -4619,20 +4641,29 @@ impl AppCore {
              || (look_dir.x_rot_deg() - game.last_sent_look_dir.x_rot_deg()) != 0.0;
  
          let flags = MoveFlags {
@@ -625,7 +644,7 @@ index c5b3441..fe22cee 100644
                  flags,
              });
          } else if rot_changed {
-@@ -4643,8 +4664,16 @@ impl AppCore {
+@@ -4643,8 +4674,16 @@ impl AppCore {
              });
          } else if game.player.on_ground != game.last_sent_on_ground
              || game.player.horizontal_collision != game.last_sent_horizontal_collision
@@ -1568,6 +1587,35 @@ index a97e9c9..db5f9a2 100644
              return Err(format!(
                  "no {version} assets at {} (run the client on {version} once to download them)",
                  dirs.jar_assets_dir.display()
+diff --git a/pomme-client/src/entity/non_living.rs b/pomme-client/src/entity/non_living.rs
+index 9e2e789..9bfd17e 100644
+--- a/pomme-client/src/entity/non_living.rs
++++ b/pomme-client/src/entity/non_living.rs
+@@ -161,6 +161,8 @@ pub struct NonLivingEntity {
+     pub trident_loyalty: u8,
+     // Fireworks.
+     pub attached_to_entity: bool,
++    /// The entity a firework rocket is attached to (`DATA_ATTACHED_TO_TARGET`).
++    pub attached_entity_id: Option<i32>,
+     pub shot_at_angle: bool,
+     // Experience orbs.
+     pub xp_value: i32,
+@@ -224,6 +226,7 @@ impl NonLivingEntity {
+             arrow_color: -1,
+             trident_loyalty: 0,
+             attached_to_entity: false,
++            attached_entity_id: None,
+             shot_at_angle: false,
+             xp_value: 0,
+             following_player: None,
+@@ -647,6 +650,7 @@ impl NonLivingStore {
+                 if e.kind == EntityKind::FireworkRocket =>
+             {
+                 e.attached_to_entity = attached.is_some();
++                e.attached_entity_id = attached.map(|id| id as i32);
+             }
+             (10, MetaValue::Bool(angled)) if e.kind == EntityKind::FireworkRocket => {
+                 e.shot_at_angle = angled;
 diff --git a/pomme-client/src/harness/exec.rs b/pomme-client/src/harness/exec.rs
 index 44ad99e..bc09a94 100644
 --- a/pomme-client/src/harness/exec.rs
@@ -2786,10 +2834,121 @@ index af87ae4..dc9e2d4 100644
          return vec![("-".into(), fix)];
      };
 diff --git a/pomme-client/src/physics/movement.rs b/pomme-client/src/physics/movement.rs
-index 0abb64f..c3505b3 100644
+index 0abb64f..1e7a1b2 100644
 --- a/pomme-client/src/physics/movement.rs
 +++ b/pomme-client/src/physics/movement.rs
-@@ -731,7 +731,12 @@ fn apply_collision(
+@@ -138,6 +138,38 @@ pub fn tick(
+         cos_y_rot,
+     );
+ 
++    // `LocalPlayer.aiStep`: a fresh jump press in the air, not flying,
++    // riding or climbing, tries to start gliding (`tryToStartFallFlying`).
++    if !player.was_jump_pressed
++        && raw_jump_held
++        && !player.flying
++        && !is_passenger
++        && !player.on_ground
++        && !player.fall_flying
++        && !player.in_water
++        && player.can_glide()
++        && !on_climbable(player, world.chunks, world.block_state_table, tags)
++    {
++        player.fall_flying = true;
++        player.start_fall_flying_pending = true;
++    }
++    // `LivingEntity.canGlide` fails on landing, in water or without the
++    // elytra; the server clears the flag then, and prediction follows it.
++    if player.fall_flying && (player.on_ground || player.in_water || is_passenger || !player.can_glide()) {
++        player.fall_flying = false;
++    }
++    // `FireworkRocketEntity.tick` for each rocket attached to a glider.
++    if player.fall_flying {
++        for _ in 0..std::mem::take(&mut player.firework_boosts) {
++            let look = look_angle(player);
++            let m = *player.velocity;
++            player.velocity.x = m.x + look.x * 0.1 + (look.x * 1.5 - m.x) * 0.5;
++            player.velocity.y = m.y + look.y * 0.1 + (look.y * 1.5 - m.y) * 0.5;
++            player.velocity.z = m.z + look.z * 0.1 + (look.z * 1.5 - m.z) * 0.5;
++        }
++    }
++    player.firework_boosts = 0;
++
+     // `LocalPlayer.aiStep`'s `goDownInWater`, before the living jump.
+     if player.in_water
+         && input.performing_action(input::Action::Sneak)
+@@ -264,6 +296,15 @@ fn travel(
+     sin_y_rot: f32,
+     cos_y_rot: f32,
+ ) {
++    if player.fall_flying && !(player.in_water && player.is_affected_by_fluids()) {
++        if on_climbable(player, world.chunks, world.block_state_table, tags) {
++            // `travelFallFlying` on a ladder: air travel, and the glide ends.
++            player.fall_flying = false;
++        } else {
++            tick_fall_flying(player, input, world, tags, is_passenger, sin_y_rot, cos_y_rot);
++            return;
++        }
++    }
+     if player.in_water && player.is_affected_by_fluids() {
+         tick_water(
+             player,
+@@ -291,6 +332,55 @@ fn travel(
+     }
+ }
+ 
++/// `Entity.getLookAngle` (`calculateViewVector`), widened from float.
++fn look_angle(player: &LocalPlayer) -> glam::DVec3 {
++    let f = player.look_dir.x_rot_deg() * (std::f32::consts::PI / 180.0);
++    let g = -player.look_dir.y_rot_deg() * (std::f32::consts::PI / 180.0);
++    let (h, i, j, k) = (g.cos(), g.sin(), f.cos(), f.sin());
++    glam::DVec3::new(f64::from(i * j), f64::from(-k), f64::from(h * j))
++}
++
++/// `LivingEntity.travelFallFlying` and `updateFallFlyingMovement`.
++#[allow(clippy::too_many_arguments)]
++fn tick_fall_flying(
++    player: &mut LocalPlayer,
++    input: &InputState,
++    world: CollisionWorld<'_>,
++    tags: &BlockTags,
++    is_passenger: bool,
++    sin_y_rot: f32,
++    cos_y_rot: f32,
++) {
++    let look = look_angle(player);
++    let lean = player.look_dir.x_rot_deg() * (std::f32::consts::PI / 180.0);
++    let look_hor = (look.x * look.x + look.z * look.z).sqrt();
++    let mut m = *player.velocity;
++    let move_hor = (m.x * m.x + m.z * m.z).sqrt();
++    let gravity = gravity(player);
++    let lift = f64::from(lean).cos().powi(2);
++    m.y += gravity * (-1.0 + lift * 0.75);
++    if m.y < 0.0 && look_hor > 0.0 {
++        let convert = m.y * -0.1 * lift;
++        m.x += look.x * convert / look_hor;
++        m.y += convert;
++        m.z += look.z * convert / look_hor;
++    }
++    if lean < 0.0 && look_hor > 0.0 {
++        let convert = move_hor * f64::from(-lean.sin()) * 0.04;
++        m.x += -look.x * convert / look_hor;
++        m.y += convert * 3.2;
++        m.z += -look.z * convert / look_hor;
++    }
++    if look_hor > 0.0 {
++        m.x += (look.x / look_hor * move_hor - m.x) * 0.1;
++        m.z += (look.z / look_hor * move_hor - m.z) * 0.1;
++    }
++    player.velocity.x = m.x * f64::from(0.99_f32);
++    player.velocity.y = m.y * f64::from(0.98_f32);
++    player.velocity.z = m.z * f64::from(0.99_f32);
++    apply_collision(player, input, world, tags, is_passenger, 0.0, 0.0, sin_y_rot, cos_y_rot);
++}
++
+ /// Touching down cancels flight, even in creative.
+ fn stop_flying_on_ground(player: &mut LocalPlayer) {
+     if player.on_ground && player.flying && player.game_mode != 3 {
+@@ -731,7 +821,12 @@ fn apply_collision(
      let aabb = player.bounding_box();
      let shift_down = input.performing_action(input::Action::Sneak);
      let ctx = collision_context(player, shift_down);
@@ -2803,7 +2962,21 @@ index 0abb64f..c3505b3 100644
      let (resolved, on_ground) = resolve_collision(
          world,
          aabb,
-@@ -1540,6 +1545,8 @@ fn friction_influenced_speed(speed: f32, player: &LocalPlayer, block_friction: f
+@@ -1141,6 +1236,13 @@ fn update_player_pose(
+     is_passenger: bool,
+ ) {
+     let descending = input.performing_action(input::Action::Sneak);
++    // `Player.updatePlayerPose`: FALL_FLYING comes first, the same 0.6 box
++    // and 0.4 eyes as swimming.
++    if player.fall_flying {
++        player.swimming_pose = true;
++        player.crouching = false;
++        return;
++    }
+     if !can_fit_with_height(world, player, crate::player::SWIMMING_HEIGHT, descending) {
+         return;
+     }
+@@ -1540,6 +1642,8 @@ fn friction_influenced_speed(speed: f32, player: &LocalPlayer, block_friction: f
          } else {
              player.fly_speed
          }
@@ -2835,10 +3008,10 @@ index 53d9f4c..ff2e3d8 100644
      /// partial tick).
      pub fn attack_strength_scale(&self, delay: f32) -> f32 {
 diff --git a/pomme-client/src/player/mod.rs b/pomme-client/src/player/mod.rs
-index b923f7d..6f166da 100644
+index b923f7d..7a68bf5 100644
 --- a/pomme-client/src/player/mod.rs
 +++ b/pomme-client/src/player/mod.rs
-@@ -329,6 +329,12 @@ pub struct LocalPlayer {
+@@ -329,6 +329,20 @@ pub struct LocalPlayer {
      /// Vanilla `onUpdateAbilities`: a locally toggled `flying` still has to be
      /// reported to the server via `ServerboundPlayerAbilities`.
      pub abilities_dirty: bool,
@@ -2848,18 +3021,56 @@ index b923f7d..6f166da 100644
 +    /// Meteor Speed (Vanilla): the horizontal move this tick, replacing the
 +    /// one vanilla derives, as its `PlayerMoveEvent` does.
 +    pub meteor_move: Option<(f64, f64)>,
++    /// Shared flag 7, `isFallFlying`: gliding on an elytra. Set locally on
++    /// `tryToStartFallFlying`, then kept by the server's entity data.
++    pub fall_flying: bool,
++    /// A `START_FALL_FLYING` player command is owed to the server.
++    pub start_fall_flying_pending: bool,
++    /// Firework rockets attached to the player this tick, each of which
++    /// boosts a glide (`FireworkRocketEntity.tick`).
++    pub firework_boosts: u32,
      pub eye_height: f32,
      pub prev_eye_height: f32,
      pub walk_dist: f32,
-@@ -484,6 +490,8 @@ impl LocalPlayer {
+@@ -484,6 +498,11 @@ impl LocalPlayer {
              jump_riding_ticks: 0,
              jump_riding_scale: 0.0,
              abilities_dirty: false,
 +            meteor_air_speed: None,
 +            meteor_move: None,
++            fall_flying: false,
++            start_fall_flying_pending: false,
++            firework_boosts: 0,
              eye_height: STANDING_EYE_HEIGHT,
              prev_eye_height: STANDING_EYE_HEIGHT,
              walk_dist: 0.0,
+@@ -633,10 +652,26 @@ impl LocalPlayer {
+     /// player.
+     // TODO: vanilla's sprint speed modifier only follows a local
+     // `setSprinting`; this server flag also drives pomme's movement speed.
++    /// `LivingEntity.canGlide` for the chest slot: an item that glides (the
++    /// elytra's `glider` component) and isn't one use from breaking.
++    pub fn can_glide(&self) -> bool {
++        use pomme_item::components::{Damage, MaxDamage};
++        let chest = &self.inventory.armor_slots()[1];
++        let pomme_item::ItemStack::Present(data) = chest else { return false };
++        if !data.has_component(pomme_registry::builtin::DataComponentKind::Glider) {
++            return false;
++        }
++        match (data.component::<Damage>(), data.component::<MaxDamage>()) {
++            (Some(damage), Some(max)) => damage.amount < max.amount - 1,
++            _ => true,
++        }
++    }
++
+     pub fn sync_shared_flags(&mut self, flags: u8) {
+         self.on_fire = crate::entity::shared_flags_on_fire(flags);
+         self.sprinting = flags & 0x08 != 0;
+         self.swimming = flags & 0x10 != 0;
++        self.fall_flying = flags & 0x80 != 0;
+         self.glowing = crate::entity::shared_flags_glowing(flags);
+         self.invisible = crate::entity::shared_flags_invisible(flags);
+     }
 diff --git a/pomme-client/src/renderer/chunk/atlas.rs b/pomme-client/src/renderer/chunk/atlas.rs
 index 01c667e..9532f23 100644
 --- a/pomme-client/src/renderer/chunk/atlas.rs
@@ -4717,7 +4928,7 @@ index 6a559b3..1c4da7e 100644
      }
  
 diff --git a/pomme-client/src/singleplayer.rs b/pomme-client/src/singleplayer.rs
-index 0eb98ef..095ec65 100644
+index 0eb98ef..80b67c6 100644
 --- a/pomme-client/src/singleplayer.rs
 +++ b/pomme-client/src/singleplayer.rs
 @@ -4,7 +4,12 @@
@@ -4750,7 +4961,15 @@ index 0eb98ef..095ec65 100644
      use std::path::{Path, PathBuf};
  
      use pomme_singleplayer::{
-@@ -162,7 +170,7 @@ mod steel {
+@@ -145,6 +153,7 @@ mod steel {
+                 world_list::Difficulty::Hard => Difficulty::Hard,
+             },
+             allow_commands: world.allow_commands,
++            superflat: world.extra.get("world_type").and_then(|v| v.as_str()) == Some("flat"),
+             transport: ServerTransport {
+                 read: Box::new(server.rx),
+                 write: Box::new(server.tx),
+@@ -162,7 +171,7 @@ mod steel {
      }
  }
  
@@ -4759,7 +4978,7 @@ index 0eb98ef..095ec65 100644
  mod steel {
      use std::path::Path;
  
-@@ -200,4 +208,10 @@ mod steel {
+@@ -200,4 +209,10 @@ mod steel {
      }
  }
  
@@ -6013,7 +6232,7 @@ index 7ba3ece..25a3156 100644
  
          MainMenuResult {
 diff --git a/pomme-client/src/ui/menu/worlds.rs b/pomme-client/src/ui/menu/worlds.rs
-index 98f5d8f..b438db2 100644
+index 98f5d8f..8ff432e 100644
 --- a/pomme-client/src/ui/menu/worlds.rs
 +++ b/pomme-client/src/ui/menu/worlds.rs
 @@ -80,7 +80,7 @@ impl MainMenu {
@@ -6025,7 +6244,33 @@ index 98f5d8f..b438db2 100644
  
          elements.push(MenuElement::Text {
              x: common::gui_half_width(screen_w, gs),
-@@ -886,6 +886,7 @@ impl MainMenu {
+@@ -531,6 +531,8 @@ pub(super) struct CreateWorldState {
+     /// `None` until the player touches the control, which is when vanilla stops
+     /// deriving it from the game mode.
+     allow_commands: Option<bool>,
++    /// Vanilla's World Type button; Pomme's server makes Default and Superflat.
++    superflat: bool,
+     folder: String,
+     folder_for: String,
+ }
+@@ -824,10 +826,13 @@ impl MainMenu {
+             }
+             CreateTab::World => {
+                 let left = cx - (half * 2.0 + COL_GAP * gs) / 2.0;
+-                for (i, label) in ["World Type: Default", "Customize"].into_iter().enumerate() {
+-                    let x = left + (half + COL_GAP * gs) * i as f32;
+-                    inert(&mut elements, &mut any_hovered, x, y, half, label);
++                let world_type = if self.create.superflat { "World Type: Superflat" } else { "World Type: Default" };
++                if push_button(&mut elements, &mut any_hovered, cursor, left, y, half, btn_h, gs, world_type, true)
++                    && clicked
++                {
++                    self.create.superflat = !self.create.superflat;
+                 }
++                inert(&mut elements, &mut any_hovered, left + half + COL_GAP * gs, y, half, "Customize");
+                 y += btn_h + row_gap;
+ 
+                 let rect = self.labelled_field(
+@@ -886,6 +891,7 @@ impl MainMenu {
          }
  
          let footer_y = screen_h - footer_h + (footer_h - btn_h) / 2.0;
@@ -6033,7 +6278,7 @@ index 98f5d8f..b438db2 100644
          if push_button(
              &mut elements,
              &mut any_hovered,
-@@ -898,8 +899,11 @@ impl MainMenu {
+@@ -898,8 +904,11 @@ impl MainMenu {
              "Create New World",
              true,
          ) && clicked
@@ -6046,7 +6291,7 @@ index 98f5d8f..b438db2 100644
          }
          if push_button(
              &mut elements,
-@@ -919,7 +923,7 @@ impl MainMenu {
+@@ -919,7 +928,7 @@ impl MainMenu {
  
          MainMenuResult {
              elements,
@@ -6055,7 +6300,7 @@ index 98f5d8f..b438db2 100644
              cursor_pointer: any_hovered,
              clicked_button: clicked && any_hovered,
          }
-@@ -982,7 +986,7 @@ impl MainMenu {
+@@ -982,7 +991,7 @@ impl MainMenu {
          self.set_screen(back, key_bindings);
      }
  
@@ -6064,9 +6309,16 @@ index 98f5d8f..b438db2 100644
          let name = self.world_name.value().trim();
          let (game_mode, hardcore) = self.create.mode.stored();
          let summary = crate::ui::world_list::WorldSummary {
-@@ -997,10 +1001,12 @@ impl MainMenu {
+@@ -995,12 +1004,18 @@ impl MainMenu {
+             difficulty: self.create.difficulty(),
+             seed: self.world_seed.value().trim().to_owned(),
              version: self.version.clone(),
-             extra: Default::default(),
+-            extra: Default::default(),
++            extra: if self.create.superflat {
++                serde_json::Map::from_iter([("world_type".to_owned(), serde_json::Value::from("flat"))])
++            } else {
++                Default::default()
++            },
          };
 -        if let Err(e) = self.world_list.create(summary) {
 -            tracing::error!("Failed to create world: {e}");
@@ -6080,7 +6332,7 @@ index 98f5d8f..b438db2 100644
      }
  
      /// Vanilla recomputes this per keystroke; per frame would stat the disk for
-@@ -1116,7 +1122,7 @@ impl MainMenu {
+@@ -1116,7 +1131,7 @@ impl MainMenu {
              y,
              form_w,
              "Reset Icon",
@@ -6089,7 +6341,7 @@ index 98f5d8f..b438db2 100644
          );
          y += btn_h + spacing;
  
-@@ -1127,9 +1133,10 @@ impl MainMenu {
+@@ -1127,9 +1142,10 @@ impl MainMenu {
              y,
              form_w,
              "Open World Folder",
@@ -7558,10 +7810,10 @@ index ac1e710..dc683cc 100644
      let mut archive =
          zip::ZipArchive::new(std::io::Cursor::new(jar)).map_err(|e| format!("Client jar: {e}"))?;
 diff --git a/pomme-relay/Cargo.toml b/pomme-relay/Cargo.toml
-index 47025a4..2d43fe3 100644
+index 47025a4..3bab50e 100644
 --- a/pomme-relay/Cargo.toml
 +++ b/pomme-relay/Cargo.toml
-@@ -6,15 +6,20 @@ edition = "2024"
+@@ -6,15 +6,21 @@ edition = "2024"
  license = "GPL-3.0-or-later"
  publish = false
  
@@ -7579,6 +7831,7 @@ index 47025a4..2d43fe3 100644
  reqwest = { workspace = true, features = ["stream"] }
 -tokio = { workspace = true, features = ["io-util", "macros", "net", "rt-multi-thread", "time"] }
 -tower-http = { version = "0.7", features = ["fs"] }
++socket2 = { version = "0.6", features = ["all"] }
 +tokio = { workspace = true, features = ["full"] }
 +tower-http = { version = "0.7", features = ["fs", "set-header"] }
  tracing = { workspace = true }
@@ -7608,7 +7861,7 @@ index 3a35274..2489d7b 100644
      let charged = |bytes: usize| limits.relayed(client, bytes + MESSAGE_COST);
      let sent = tokio::time::timeout(HANDSHAKE_WAIT, opening(&mut from_page, charged));
 diff --git a/pomme-relay/src/main.rs b/pomme-relay/src/main.rs
-index 7c52164..0001d39 100644
+index 7c52164..cb86540 100644
 --- a/pomme-relay/src/main.rs
 +++ b/pomme-relay/src/main.rs
 @@ -1,7 +1,7 @@
@@ -7620,16 +7873,18 @@ index 7c52164..0001d39 100644
  //! as `/relay/<host>/<path>`, and only the hosts in [`relay::ALLOWED_HOSTS`]
  //! are fetched. A page can't open sockets either, so it reaches game servers
  //! through a WebSocket to `/connect/<host>/<port>`, which this bridges to the
-@@ -20,6 +20,8 @@
+@@ -19,7 +19,10 @@
+ 
  mod connect;
  mod guard;
++mod lan;
  mod limits;
 +#[cfg(feature = "local-worlds")]
 +mod local_world;
  mod relay;
  
  use std::net::SocketAddr;
-@@ -34,11 +36,14 @@ use tower_http::services::ServeDir;
+@@ -34,11 +37,20 @@ use tower_http::services::ServeDir;
  
  #[derive(Parser)]
  struct Args {
@@ -7642,42 +7897,57 @@ index 7c52164..0001d39 100644
 +    #[cfg(feature = "local-worlds")]
 +    #[arg(long, value_name = "DIRECTORY")]
 +    local_worlds: Option<PathBuf>,
++    /// Hosts singleplayer worlds for anyone the page is served to, up to this
++    /// many at once and one per client address, instead of only for this
++    /// machine. Each is an integrated server on the relay's own CPU and memory.
++    #[cfg(feature = "local-worlds")]
++    #[arg(long, value_name = "COUNT", requires = "local_worlds")]
++    hosted_worlds: Option<usize>,
      #[command(flatten)]
      config: Config,
  }
-@@ -50,6 +55,8 @@ struct AppState {
+@@ -50,6 +62,10 @@ struct AppState {
      config: Arc<Config>,
      connections: Arc<guard::Connections>,
      limits: Arc<limits::Limits>,
++    /// LAN worlds heard, on a relay allowed to reach private servers.
++    lan: Option<Arc<lan::Lan>>,
 +    #[cfg(feature = "local-worlds")]
 +    worlds: Option<Arc<local_world::Worlds>>,
  }
  
  impl AppState {
-@@ -59,6 +66,8 @@ impl AppState {
+@@ -59,6 +75,9 @@ impl AppState {
              config: Arc::new(config),
              connections: Arc::default(),
              limits: Arc::default(),
++            lan: None,
 +            #[cfg(feature = "local-worlds")]
 +            worlds: None,
          }
      }
  }
-@@ -121,7 +130,21 @@ async fn main() {
+@@ -121,7 +140,27 @@ async fn main() {
              "Listening beyond this machine without --public-host: anything that names localhost is answered"
          );
      }
 -    serve(listener, app(AppState::new(args.config), &args.dir)).await;
-+    let state = AppState::new(args.config);
++    let mut state = AppState::new(args.config);
++    if state.config.allow_private_servers {
++        state.lan = Some(lan::start());
++    }
 +    #[cfg(feature = "local-worlds")]
 +    let state = {
 +        let mut state = state;
 +        if let Some(path) = args.local_worlds {
-+            assert!(args.listen.ip().is_loopback() && state.config.public_host.is_none()
-+                && !state.config.trust_proxy, "--local-worlds requires a loopback-only relay");
++            let hosted = args.hosted_worlds.filter(|n| *n > 0);
++            assert!(hosted.is_some() || (args.listen.ip().is_loopback() && state.config.public_host.is_none()
++                && !state.config.trust_proxy), "--local-worlds needs a loopback-only relay, or --hosted-worlds");
 +            std::fs::create_dir_all(&path).expect("create local world storage");
 +            state.worlds = Some(Arc::new(local_world::Worlds::new(
 +                path.canonicalize().expect("resolve local world storage"),
++                hosted.unwrap_or(1),
++                hosted.is_some(),
 +            )));
 +        }
 +        state
@@ -7686,7 +7956,7 @@ index 7c52164..0001d39 100644
  }
  
  async fn serve(listener: TcpListener, app: Router) {
-@@ -135,10 +158,21 @@ async fn serve(listener: TcpListener, app: Router) {
+@@ -135,10 +174,22 @@ async fn serve(listener: TcpListener, app: Router) {
  
  /// The routes, with the page in `dir` served for everything else.
  fn app(state: AppState, dir: &Path) -> Router {
@@ -7700,6 +7970,7 @@ index 7c52164..0001d39 100644
          .nest("/relay", Router::new().fallback(any(relay::relay)))
          .route("/connect/{host}/{port}", get(connect::connect))
 -        .fallback_service(ServeDir::new(dir))
++        .route("/lan", get(lan::list))
 +        // Revalidated on every load, so a rebuilt page is never mixed with a
 +        // cached one; unchanged files still come back as 304s.
 +        .fallback_service(tower_http::set_header::SetResponseHeader::overriding(
@@ -7722,6 +7993,38 @@ index 8c92226..2b9c0e1 100644
 +tokio = { workspace = true, features = ["full"] }
  tokio-util = { version = "0.7", features = ["rt"] }
  tracing = { workspace = true }
+diff --git a/pomme-singleplayer/src/lib.rs b/pomme-singleplayer/src/lib.rs
+index 6536c1a..3782106 100644
+--- a/pomme-singleplayer/src/lib.rs
++++ b/pomme-singleplayer/src/lib.rs
+@@ -52,6 +52,8 @@ pub struct LaunchOptions {
+     pub difficulty: Difficulty,
+     /// Cheats. Puts the player in the op group rather than setting a flag.
+     pub allow_commands: bool,
++    /// Vanilla's Superflat world type: the overworld uses the flat generator.
++    pub superflat: bool,
+     pub transport: ServerTransport,
+ }
+ 
+@@ -313,7 +315,9 @@ fn runtime_config(options: &LaunchOptions, chunk_threads: usize) -> RuntimeConfi
+ fn worlds_config(options: &LaunchOptions) -> WorldsConfig {
+     let world = |name: &str, default: bool| WorldEntryConfig {
+         name: name.to_owned(),
+-        generator: Identifier::vanilla(name.to_owned()),
++        generator: Identifier::vanilla(
++            if name == "overworld" && options.superflat { "flat" } else { name }.to_owned(),
++        ),
+         default,
+         seed: None,
+         default_gamemode: None,
+@@ -377,6 +381,7 @@ mod tests {
+             game_mode: GameType::Creative,
+             difficulty: Difficulty::Peaceful,
+             allow_commands: true,
++            superflat: false,
+             // Nothing joins, so the server reads end of file and writes nowhere.
+             transport: ServerTransport {
+                 read: Box::new(tokio::io::empty()),
 diff --git a/third_party/simdnbt/Cargo.toml b/third_party/simdnbt/Cargo.toml
 new file mode 100644
 index 0000000..70ae3da

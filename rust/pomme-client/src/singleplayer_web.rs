@@ -83,7 +83,8 @@ pub fn open(world: &WorldSummary, dir: &Path, view_distance: u8) -> Result<(Worl
         Difficulty::Hard => 3,
     };
     let rules = u8::from(matches!(world.game_mode, GameMode::Creative))
-        | (difficulty << 1) | (u8::from(world.allow_commands) << 3);
+        | (difficulty << 1) | (u8::from(world.allow_commands) << 3)
+        | (u8::from(world.extra.get("world_type").and_then(|v| v.as_str()) == Some("flat")) << 4);
     let distance = view_distance.clamp(2, 32);
     let endpoint = format!("/local-world/{id}/{seed}/{rules}/{distance}");
     Ok((World { dir: dir.to_owned(), id, closed: Rc::new(Cell::new(false)) }, endpoint))

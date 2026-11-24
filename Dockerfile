@@ -10,7 +10,7 @@ RUN cargo install wasm-bindgen-cli --version 0.2.121 --locked
 COPY build.sh .
 COPY web/ web/
 RUN POMME_REPO=/pomme ./build.sh
-RUN cargo build --manifest-path /pomme/Cargo.toml --locked --release -p pomme-relay
+RUN cargo build --manifest-path /pomme/Cargo.toml --locked --release -p pomme-relay --features local-worlds
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.source="https://github.com/VKRTTY/PommeWeb"

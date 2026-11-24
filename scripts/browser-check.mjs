@@ -12,9 +12,13 @@ import path from 'node:path';
 const [url, seconds = '20', shot = 'shot.png', every = '0'] = process.argv.slice(2);
 const chrome = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const port = 9300 + Math.floor(Math.random() * 500);
-const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'pomme-chrome-'));
+// PROFILE keeps a Chrome profile between runs, so the game files stay cached.
+const keep = Boolean(process.env.PROFILE);
+const profile = process.env.PROFILE ?? await fs.mkdtemp(path.join(os.tmpdir(), 'pomme-chrome-'));
+await fs.mkdir(profile, {recursive: true});
+await fs.rm(path.join(profile, 'Default', 'Sessions'), {recursive: true, force: true}).catch(() => {});
 const proc = spawn(chrome, [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
-  '--no-first-run', '--no-default-browser-check', '--enable-unsafe-webgpu',
+  '--no-first-run', '--no-default-browser-check', '--hide-crash-restore-bubble', '--disable-session-crashed-bubble', '--enable-unsafe-webgpu',
   '--window-size=1280,800', url], {stdio: 'ignore'});
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -53,7 +57,7 @@ const send = (method, params = {}) => new Promise(res => {
 await send('Runtime.enable');
 await send('Log.enable');
 await send('Page.enable');
-await send('Page.reload', {ignoreCache: true});
+await send('Page.reload', {ignoreCache: !keep});
 
 const capture = async file => {
   const r = await send('Page.captureScreenshot', {format: 'png'});
@@ -99,7 +103,7 @@ if (seconds === '-') {
   }
   ws.close();
   proc.kill();
-  await fs.rm(profile, {recursive: true, force: true}).catch(() => {});
+  if (!keep) await fs.rm(profile, {recursive: true, force: true}).catch(() => {});
   process.exit(0);
 }
 const total = Number(seconds) * 1000;
@@ -113,4 +117,4 @@ await capture(shot);
 console.log(`screenshot: ${shot}`);
 ws.close();
 proc.kill();
-await fs.rm(profile, {recursive: true, force: true}).catch(() => {});
+if (!keep) await fs.rm(profile, {recursive: true, force: true}).catch(() => {});
