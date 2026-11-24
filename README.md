@@ -144,6 +144,13 @@ pass `--local-worlds /path/to/world-saves` after Cargo's `--`. Neither
 
 </details>
 
+## Railway
+
+Deploy this repository as a Dockerfile service. Railway supplies the public
+domain and port; the container serves the built browser client and relay.
+The hosted relay only connects to public game servers. Local singleplayer
+continues to use `./play.sh` on your own machine.
+
 ## License
 
 GPL-3.0-or-later, as Pomme is. See [LICENSE](LICENSE).
