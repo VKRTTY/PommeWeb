@@ -24,6 +24,15 @@ pub struct Memory {
     was_on_ground: bool,
     /// Actions to hold from the next frame on (AutoClicker).
     pub pending: std::collections::HashSet<Action>,
+    /// Flight's anti-kick counters and the last Y sent (`Flight.lastPacketY`).
+    pub flight_delay_left: i32,
+    pub flight_off_left: i32,
+    pub flight_last_packet_y: std::cell::Cell<f64>,
+    pub flight_was_on: bool,
+    /// `Timer.setOverride`: Speed's timer while moving; 1 is off.
+    pub timer_override: f64,
+    pub flight_last_yaw: f32,
+    pub flight_flip: bool,
 }
 
 fn horizontal_input(input: &InputState, yaw_rad: f32) -> Option<(f64, f64)> {
@@ -36,6 +45,35 @@ fn horizontal_input(input: &InputState, yaw_rad: f32) -> Option<(f64, f64)> {
     let (x, z) = (-sin * forward + cos * strafe, cos * forward + sin * strafe);
     let len = (x * x + z * z).sqrt();
     Some((x / len, z / len))
+}
+
+fn flight_mode_is(meteor: &MeteorClient, mode: &str) -> bool {
+    meteor.is_active("flight") && meteor.get("flight", "mode").as_str() == Some(mode)
+}
+
+/// Flight is on in Abilities mode, which cancels the server's abilities.
+pub fn flight_abilities(meteor: &MeteorClient) -> bool {
+    flight_mode_is(meteor, "Abilities")
+}
+
+/// Flight's Packet anti-kick (its second `mode` setting) is on.
+pub fn flight_anti_kick(meteor: &MeteorClient) -> bool {
+    let Some(index) = meteor.index("flight") else { return false };
+    meteor.is_active("flight") && meteor.value(index, "Anti Kick", "mode").as_str() == Some("Packet")
+}
+
+/// `Flight.antiKickPacket`: while the off window is open and the player hangs
+/// in the air, the Y sent is a hair under the last one (0.0313, past the
+/// server's 0.03125 floating check); otherwise the last Y is remembered.
+pub fn flight_packet_y(meteor: &MeteorClient, game: &GameState, current: f64) -> f64 {
+    let last = meteor.memory.flight_last_packet_y.get();
+    let should_fly_down = current >= last || last - current < 0.0313;
+    if meteor.memory.flight_delay_left <= 0 && last != f64::MAX && should_fly_down && !game.player.on_ground {
+        last - 0.0313
+    } else {
+        meteor.memory.flight_last_packet_y.set(current);
+        current
+    }
 }
 
 /// The on-ground flag of the movement packet about to be sent: Meteor's
@@ -69,25 +107,43 @@ pub fn tick(meteor: &mut MeteorClient, input: &InputState, game: &mut GameState,
     let ticks = meteor.memory.ticks;
     let jump_pressed = input.key_just_pressed(winit::keyboard::KeyCode::Space);
 
-    // Speed: Vanilla sets the horizontal speed in blocks per second; Strafe
-    // multiplies it.
+    // Speed (`Speed.java`, Vanilla mode): the move event's horizontal motion is
+    // replaced by `PlayerUtils.getHorizontalVelocity(vanilla-speed)`; no input
+    // means no horizontal motion at all. `stopSpeed` lists when it's off.
+    game.player.meteor_move = None;
     if meteor.is_active("speed") {
         let p = &game.player;
-        let ok = (!input.action_held(Action::Sneak) || meteor.get_bool("speed", "when-sneaking"))
-            && (p.on_ground || !meteor.get_bool("speed", "only-on-ground"))
-            && (!p.in_water || meteor.get_bool("speed", "in-liquids"))
-            && !p.flying;
-        if ok && let Some((dx, dz)) = horizontal_input(input, game.player.look_dir.y_rot_rad()) {
-            let bps = if meteor.get("speed", "mode").as_str() == Some("Strafe") {
-                meteor.get_f64("speed", "strafe-speed") * 4.3
-            } else {
-                meteor.get_f64("speed", "vanilla-speed")
-            };
-            let limit = meteor.get_bool("speed", "speed-limit");
-            let per_tick = if limit { (bps / 20.0).min(0.9) } else { bps / 20.0 };
-            game.player.velocity.x = dx * per_tick;
-            game.player.velocity.z = dz * per_tick;
+        let climbing = crate::physics::movement::on_climbable(p, &game.chunk_store, game.block_registry.block_state_table(), game.block_registry.tags());
+        let mode = meteor.get("speed", "mode");
+        let vanilla = mode.as_str() != Some("Strafe");
+        let stop = climbing
+            || game.riding_vehicle_id.is_some()
+            || (input.action_held(Action::Sneak) && !meteor.get_bool("speed", "when-sneaking"))
+            || (meteor.get_bool("speed", "only-on-ground") && !p.on_ground && vanilla)
+            || (p.in_water && !meteor.get_bool("speed", "in-liquids"));
+        if !stop && vanilla {
+            let bps = meteor.get_f64("speed", "vanilla-speed");
+            let yaw = f64::from(p.look_dir.y_rot_rad());
+            let (forward, right) = ((-yaw.sin(), yaw.cos()), (-yaw.cos(), -yaw.sin()));
+            let (mut vx, mut vz) = (0.0, 0.0);
+            let (mut a, mut b) = (false, false);
+            if input.action_held(Action::Forward) { vx += forward.0 / 20.0 * bps; vz += forward.1 / 20.0 * bps; a = true; }
+            if input.action_held(Action::Backward) { vx -= forward.0 / 20.0 * bps; vz -= forward.1 / 20.0 * bps; a = true; }
+            if input.action_held(Action::StrafeRight) { vx += right.0 / 20.0 * bps; vz += right.1 / 20.0 * bps; b = true; }
+            if input.action_held(Action::StrafeLeft) { vx -= right.0 / 20.0 * bps; vz -= right.1 / 20.0 * bps; b = true; }
+            if a && b {
+                let diagonal = std::f64::consts::FRAC_1_SQRT_2;
+                vx *= diagonal;
+                vz *= diagonal;
+            }
+            game.player.meteor_move = Some((vx, vz));
         }
+        // The Timer override while moving (`Speed.onPlayerMove`).
+        let timer = meteor.get_f64("speed", "timer");
+        let moving = input.action_held(Action::Forward) || input.action_held(Action::Backward) || input.action_held(Action::StrafeLeft) || input.action_held(Action::StrafeRight);
+        meteor.memory.timer_override = if !stop && timer != 1.0 && moving { timer } else { 1.0 };
+    } else {
+        meteor.memory.timer_override = 1.0;
     }
 
     // Spider: climbs walls it's pushed into.

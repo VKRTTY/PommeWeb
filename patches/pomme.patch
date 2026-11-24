@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..6f2b93b 100644
+index cfadfa1..c042045 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -533,7 +533,28 @@ index cfadfa1..6f2b93b 100644
              match event {
                  NetworkEvent::ProtocolSelected { protocol } => game.select_protocol(protocol),
                  NetworkEvent::LoggedIn => {
-@@ -3811,14 +3814,14 @@ impl AppCore {
+@@ -3084,10 +3087,16 @@ impl AppCore {
+                     flying_speed,
+                     walking_speed,
+                 } => {
+-                    game.player.flying = flying;
+-                    game.player.may_fly = can_fly;
+-                    game.player.fly_speed = flying_speed;
+-                    game.player.walk_speed = walking_speed;
++                    // Meteor's Flight (Abilities) cancels the packet so the server
++                    // can't switch flying off, keeping only the walking speed.
++                    if crate::meteor::modules::flight_abilities(&self.meteor) {
++                        game.player.walk_speed = walking_speed;
++                    } else {
++                        game.player.flying = flying;
++                        game.player.may_fly = can_fly;
++                        game.player.fly_speed = flying_speed;
++                        game.player.walk_speed = walking_speed;
++                    }
+                 }
+                 NetworkEvent::ServerViewDistance { distance } => {
+                     game.set_server_view_distance(distance)
+@@ -3811,14 +3820,14 @@ impl AppCore {
          // New chunk loads mark themselves dirty when their queued light
          // applies (GameState::update_light), which raises this flag.
          let loads_happened = std::mem::take(&mut game.pending_load_rescan);
@@ -551,7 +572,7 @@ index cfadfa1..6f2b93b 100644
          game.rescan_mesh_jobs(self.menu.chunk_detail);
          game.last_update_phases.rescan_ms = ms(t_rescan);
  
-@@ -3963,7 +3966,8 @@ impl AppCore {
+@@ -3963,7 +3972,8 @@ impl AppCore {
          }
  
          // Vanilla ticks the camera FOV interpolation even while dead.
@@ -561,7 +582,7 @@ index cfadfa1..6f2b93b 100644
          let fov_effect_scale = self.menu.fov_effect();
          renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
          // TODO: lava camera fluid (no eyes_in_lava).
-@@ -4286,6 +4290,8 @@ impl AppCore {
+@@ -4286,6 +4296,8 @@ impl AppCore {
              game.interaction.slow_due_to_using_item(),
              vehicle,
          );
@@ -570,7 +591,7 @@ index cfadfa1..6f2b93b 100644
          let dx = game.player.position.x - game.player.prev_position.x;
          let dz = game.player.position.z - game.player.prev_position.z;
          crate::entity::update_walk_animation(
-@@ -4483,7 +4489,7 @@ impl AppCore {
+@@ -4483,20 +4495,29 @@ impl AppCore {
              || (look_dir.x_rot_deg() - game.last_sent_look_dir.x_rot_deg()) != 0.0;
  
          let flags = MoveFlags {
@@ -579,6 +600,49 @@ index cfadfa1..6f2b93b 100644
              horizontal_collision: game.player.horizontal_collision,
          };
  
+-        if pos_changed && rot_changed {
++        // Meteor's Flight (Packet anti-kick) makes every movement packet
++        // positional, and sends a slight fall from time to time so the server
++        // sees no hovering (`Flight.onSendPacket`).
++        let anti_kick = crate::meteor::modules::flight_anti_kick(&self.meteor);
++        let mut send_pos: glam::DVec3 = pos.into();
++        if anti_kick {
++            send_pos.y = crate::meteor::modules::flight_packet_y(&self.meteor, game, send_pos.y);
++        }
++
++        if rot_changed && (pos_changed || anti_kick) {
+             sender.send(GamePacket::MovePlayerPosRot {
+-                pos: pos.into(),
++                pos: send_pos,
+                 y_rot: look_dir.y_rot_deg(),
+                 x_rot: look_dir.x_rot_deg(),
+                 flags,
+             });
+         } else if pos_changed {
+             sender.send(GamePacket::MovePlayerPos {
+-                pos: pos.into(),
++                pos: send_pos,
+                 flags,
+             });
+         } else if rot_changed {
+@@ -4507,8 +4528,16 @@ impl AppCore {
+             });
+         } else if game.player.on_ground != game.last_sent_on_ground
+             || game.player.horizontal_collision != game.last_sent_horizontal_collision
++            || anti_kick
+         {
+-            sender.send(GamePacket::MovePlayerStatusOnly { flags });
++            if anti_kick {
++                sender.send(GamePacket::MovePlayerPos {
++                    pos: send_pos,
++                    flags,
++                });
++            } else {
++                sender.send(GamePacket::MovePlayerStatusOnly { flags });
++            }
+         }
+ 
+         if pos_changed {
 diff --git a/pomme-client/src/app/input/mod.rs b/pomme-client/src/app/input/mod.rs
 index 2073c61..dc9915e 100644
 --- a/pomme-client/src/app/input/mod.rs
@@ -921,7 +985,7 @@ index e9b59ba..39a2426 100644
              _ => {}
          }
 diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
-index a9c5416..c3bf505 100644
+index a9c5416..a87ad81 100644
 --- a/pomme-client/src/app/phases/in_game.rs
 +++ b/pomme-client/src/app/phases/in_game.rs
 @@ -1,7 +1,7 @@
@@ -1029,7 +1093,7 @@ index a9c5416..c3bf505 100644
      // Added before the drain, which takes every packet when a tick is owed.
 -    core.tick_accumulator += dt;
 +    // Meteor's Timer: the game runs faster or slower.
-+    let timer = if core.meteor.is_active("timer") { core.meteor.get_f64("timer", "multiplier") as f32 } else { 1.0 };
++    let timer = core.meteor.timer_multiplier() as f32;
 +    core.tick_accumulator += dt * timer;
      let disconnect_reason =
          core.drain_network_events(connection, None, &mut gfx.renderer, &gfx.window, game);
@@ -1052,21 +1116,46 @@ index a9c5416..c3bf505 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
-@@ -4172,7 +4194,12 @@ pub fn update_game(
+@@ -4172,7 +4194,37 @@ pub fn update_game(
              .build(sw, sh, &menu_input, &mut core.input.key_bindings, |t, s| {
                  r.menu_text_width(t, s)
              });
 -        elements.extend(result.elements);
 +        // Keep the world and settings widgets visible on WebGPU without
 +        // the in-place blur pass. Title menus and native rendering are unchanged.
-+        elements.extend(result.elements.into_iter().filter(|element| {
-+            !cfg!(target_arch = "wasm32")
-+                || !matches!(element, MenuElement::BlurBackground)
++        elements.extend(result.elements.into_iter().filter_map(|element| {
++            if !cfg!(target_arch = "wasm32") {
++                return Some(element);
++            }
++            match element {
++                // The blur reads back the frame, which comes out black in the
++                // browser; a dark wash stands in, as vanilla darkens screens.
++                MenuElement::BlurBackground => Some(MenuElement::Rect {
++                    x: 0.0,
++                    y: 0.0,
++                    w: sw,
++                    h: sh,
++                    corner_radius: 0.0,
++                    color: [0.06, 0.06, 0.06, 0.55],
++                }),
++                MenuElement::BlurBackdrop => None,
++                MenuElement::FrostedRect { x, y, w, h, corner_radius, tint } => {
++                    Some(MenuElement::Rect {
++                        x,
++                        y,
++                        w,
++                        h,
++                        corner_radius,
++                        color: [tint[0] * 0.4, tint[1] * 0.4, tint[2] * 0.4, 0.85],
++                    })
++                }
++                other => Some(other),
++            }
 +        }));
          core.input.clear_just_pressed_actions();
          core.sync_display_mode(&gfx.window);
      } else if game.death_screen_open && !dialog_open {
-@@ -4212,7 +4239,9 @@ pub fn update_game(
+@@ -4212,7 +4264,9 @@ pub fn update_game(
          let clicked = core.input.left_just_pressed();
          // Vanilla `PauseScreen.extractBackground`: blurred while the menu
          // shows; F3+Esc's hidden pause draws nothing.
@@ -1077,7 +1166,7 @@ index a9c5416..c3bf505 100644
          pause_action = pause::build_pause_menu(
              &mut elements,
              sw,
-@@ -4223,10 +4252,56 @@ pub fn update_game(
+@@ -4223,10 +4277,59 @@ pub fn update_game(
              game.pause_screen,
              game.server_render_distance,
              game.singleplayer,
@@ -1108,6 +1197,9 @@ index a9c5416..c3bf505 100644
 +            r.menu_text_width(t, s)
 +        });
 +    }
++    if !game.hide_gui && !game.meteor_gui_open {
++        crate::meteor::esp::build(&core.meteor, game, &gfx.renderer, &mut elements, sw, sh);
++    }
 +    if game.meteor_gui_open && !dialog_open {
 +        let r = &gfx.renderer;
 +        let keys = core.input.keys_just_pressed();
@@ -1134,7 +1226,7 @@ index a9c5416..c3bf505 100644
      let mut player_preview = None;
      let mut book_preview = None;
      let mut screen_pointer = false;
-@@ -5622,6 +5697,15 @@ pub fn update_game(
+@@ -5622,6 +5725,15 @@ pub fn update_game(
          PauseAction::Disconnect => {
              return GameUpdateResult::ManualDisconnect;
          }
@@ -1150,7 +1242,7 @@ index a9c5416..c3bf505 100644
          PauseAction::OpenBenchmark => {
              game.pause_screen = PauseScreen::Benchmark;
          }
-@@ -5652,6 +5736,7 @@ pub fn update_game(
+@@ -5652,6 +5764,7 @@ pub fn update_game(
              game.paused = false;
              core.apply_cursor_grab(&gfx.window, Some(game));
          }
@@ -2693,6 +2785,33 @@ index af87ae4..dc9e2d4 100644
          let fix = format!("no fixture; run `just wire-fixtures {}`", version.name);
          return vec![("-".into(), fix)];
      };
+diff --git a/pomme-client/src/physics/movement.rs b/pomme-client/src/physics/movement.rs
+index 2d23b59..1c1e28a 100644
+--- a/pomme-client/src/physics/movement.rs
++++ b/pomme-client/src/physics/movement.rs
+@@ -731,7 +731,12 @@ fn apply_collision(
+     let aabb = player.bounding_box();
+     let shift_down = input.performing_action(input::Action::Sneak);
+     let ctx = collision_context(player, shift_down);
+-    let delta = back_off_from_edge(world, player, *player.velocity, shift_down, &ctx);
++    let mut movement = *player.velocity;
++    if let Some((x, z)) = player.meteor_move {
++        movement.x = x;
++        movement.z = z;
++    }
++    let delta = back_off_from_edge(world, player, movement, shift_down, &ctx);
+     let (resolved, on_ground) = resolve_collision(
+         world,
+         aabb,
+@@ -1540,6 +1545,8 @@ fn friction_influenced_speed(speed: f32, player: &LocalPlayer, block_friction: f
+         } else {
+             player.fly_speed
+         }
++    } else if let Some(speed) = player.meteor_air_speed {
++        speed
+     } else if player.sprinting {
+         SPRINT_AIR_ACCELERATION
+     } else {
 diff --git a/pomme-client/src/player/interaction.rs b/pomme-client/src/player/interaction.rs
 index 12b5ede..007bcf0 100644
 --- a/pomme-client/src/player/interaction.rs
@@ -2715,6 +2834,32 @@ index 12b5ede..007bcf0 100644
      /// Vanilla `Player.getAttackStrengthScale(0.0)` (the HUD passes no
      /// partial tick).
      pub fn attack_strength_scale(&self, delay: f32) -> f32 {
+diff --git a/pomme-client/src/player/mod.rs b/pomme-client/src/player/mod.rs
+index d7caedd..08750b0 100644
+--- a/pomme-client/src/player/mod.rs
++++ b/pomme-client/src/player/mod.rs
+@@ -303,6 +303,12 @@ pub struct LocalPlayer {
+     /// Vanilla `onUpdateAbilities`: a locally toggled `flying` still has to be
+     /// reported to the server via `ServerboundPlayerAbilities`.
+     pub abilities_dirty: bool,
++    /// Meteor Flight (Velocity mode): replaces the air acceleration, as its
++    /// `getFlyingSpeed` mixin does.
++    pub meteor_air_speed: Option<f32>,
++    /// Meteor Speed (Vanilla): the horizontal move this tick, replacing the
++    /// one vanilla derives, as its `PlayerMoveEvent` does.
++    pub meteor_move: Option<(f64, f64)>,
+     pub eye_height: f32,
+     pub prev_eye_height: f32,
+     pub walk_dist: f32,
+@@ -458,6 +464,8 @@ impl LocalPlayer {
+             jump_riding_ticks: 0,
+             jump_riding_scale: 0.0,
+             abilities_dirty: false,
++            meteor_air_speed: None,
++            meteor_move: None,
+             eye_height: STANDING_EYE_HEIGHT,
+             prev_eye_height: STANDING_EYE_HEIGHT,
+             walk_dist: 0.0,
 diff --git a/pomme-client/src/renderer/chunk/atlas.rs b/pomme-client/src/renderer/chunk/atlas.rs
 index 01c667e..9532f23 100644
 --- a/pomme-client/src/renderer/chunk/atlas.rs
@@ -3196,7 +3341,7 @@ index fda0156..5b32a12 100644
  
      /// A column of four sections, the lowest stone, lit `light` if any.
 diff --git a/pomme-client/src/renderer/mod.rs b/pomme-client/src/renderer/mod.rs
-index 80aa716..ec54d81 100644
+index 80aa716..1baa7c9 100644
 --- a/pomme-client/src/renderer/mod.rs
 +++ b/pomme-client/src/renderer/mod.rs
 @@ -112,48 +112,57 @@ pub enum RendererError {
@@ -3340,7 +3485,26 @@ index 80aa716..ec54d81 100644
          self.swapchain_dirty |= !self
              .frames
              .pace(&self.ctx, &self.swapchain, PACE_TIMEOUT_NS);
-@@ -1992,7 +2003,7 @@ impl Renderer {
+@@ -1407,6 +1418,18 @@ impl Renderer {
+         self.camera.fov_degrees()
+     }
+ 
++    /// Where a world point lands on a `sw` by `sh` screen, or `None` behind the
++    /// camera: the level's view projection, camera-relative.
++    pub fn world_to_screen(&self, world: glam::DVec3, sw: f32, sh: f32) -> Option<(f32, f32)> {
++        let relative = (world - self.camera_render_position()).as_vec3();
++        let clip = self.camera.view_projection() * relative.extend(1.0);
++        if clip.w <= 0.01 {
++            return None;
++        }
++        let ndc = clip.truncate() / clip.w;
++        Some(((ndc.x * 0.5 + 0.5) * sw, (ndc.y * 0.5 + 0.5) * sh))
++    }
++
+     pub fn camera_pivot_position(&self) -> Position {
+         self.camera.position
+     }
+@@ -1992,7 +2015,7 @@ impl Renderer {
          &mut self,
          user: &crate::user::UserData,
          resources: &dyn ResourceManager,
@@ -3349,7 +3513,7 @@ index 80aa716..ec54d81 100644
      ) {
          self.default_skin = crate::player::default_skin::index(&user.uuid);
          self.pending_skin = None;
-@@ -2244,7 +2255,7 @@ impl Renderer {
+@@ -2244,7 +2267,7 @@ impl Renderer {
  
          let frame = self.frames.index();
  
@@ -3358,7 +3522,7 @@ index 80aa716..ec54d81 100644
          self.frames.wait(&self.ctx.device)?;
          let fence_ms = t_fence.elapsed().as_secs_f32() * 1000.0;
          self.last_timings.gpu = self
-@@ -2261,7 +2272,7 @@ impl Renderer {
+@@ -2261,7 +2284,7 @@ impl Renderer {
          }
          self.screenshot.collect_ready(frame, &self.ctx.device);
  
@@ -3367,7 +3531,7 @@ index 80aa716..ec54d81 100644
          let (image_index, suboptimal) =
              match self.frames.acquire(&self.ctx.device, &self.swapchain)? {
                  rhi::Acquired::Image { index, suboptimal } => (index, suboptimal),
-@@ -2517,7 +2528,7 @@ impl Renderer {
+@@ -2517,7 +2540,7 @@ impl Renderer {
              self.gui_item_atlas.end_bake_pass(&encoder, bake);
          }
  
@@ -3376,7 +3540,7 @@ index 80aa716..ec54d81 100644
          if let RenderMode::World {
              particles,
              nameplates,
-@@ -2613,7 +2624,7 @@ impl Renderer {
+@@ -2613,7 +2636,7 @@ impl Renderer {
                          );
                      }
                      self.gpu_stamp(&encoder, frame, "sky");
@@ -3385,7 +3549,7 @@ index 80aa716..ec54d81 100644
                      // A pack that failed to build leaves its vertex format until
                      // the next frame remeshes; skip those.
                      let vanilla_terrain = self.chunk_buffers.format() == TerrainFormat::Vanilla;
-@@ -3035,7 +3046,7 @@ impl Renderer {
+@@ -3035,7 +3058,7 @@ impl Renderer {
  
          self.gui_item_atlas.end_frame();
  

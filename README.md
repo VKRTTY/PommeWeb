@@ -84,7 +84,7 @@ Press **Right Shift** in a world, or use **Meteor Client** on the pause menu.
   (smoothing, scroll, cinematic), Sprint, Auto Walk, Auto Jump, Step, Reach,
   Velocity, Jesus, Fast Climb, Flight, High Jump, No Fall, Speed, Spider, Air
   Jump, Long Jump, Anti Void, Auto Clicker, Anti AFK, Auto Respawn, Notifier,
-  Kill Aura, Timer, Fast Use, Break Delay and Parkour (27 of 169). The rest keep their settings but don't act
+  Kill Aura, Timer, Fast Use, Break Delay, Parkour and ESP (28 of 169, marked with a check in the GUI). Flight, Speed and No Fall follow Meteor's packet and movement logic. The rest keep their settings but don't act
   yet; the full status is in [HANDOFF.md](HANDOFF.md).
 
 ## How it works

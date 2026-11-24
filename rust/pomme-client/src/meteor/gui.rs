@@ -475,6 +475,19 @@ fn module_row(
     let title = &CATALOG.modules[index].title;
     let tw = ui.text_w(title);
     ui.text(title, x + (w - tw) / 2.0, y + ui.theme.s(4.0), TEXT);
+    // A check marks the modules whose behavior is ported.
+    if super::PORTED.contains(&CATALOG.modules[index].name.as_str()) {
+        const CHECK: [&str; 5] = ["......#", ".....##", "#...##.", ".#.##..", "..##..."];
+        let p = ui.theme.s(1.5);
+        let (cx, cy) = (x + w - 7.0 * p - ui.theme.s(4.0), y + (row - 5.0 * p) / 2.0);
+        for (r, line) in CHECK.iter().enumerate() {
+            for (c, ch) in line.chars().enumerate() {
+                if ch == '#' {
+                    ui.rect(cx + c as f32 * p, cy + r as f32 * p, p, p, rgba(50, 255, 50, 255));
+                }
+            }
+        }
+    }
     if hovered && gui.drag.is_none() {
         if ui.frame.left_pressed {
             meteor.toggle(index);

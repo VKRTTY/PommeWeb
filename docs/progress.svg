@@ -7,7 +7,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 .note { font-size: 13px; fill: #8b949e; }
 </style>
 <rect width="100%" height="100%" fill="#0d1117"/>
-<text x="24" y="40" class="title">Pomme web port: 65.83%</text>
+<text x="24" y="40" class="title">Pomme web port: 65.97%</text>
 <text x="24" y="92" class="group">Graphics (WebGPU): 96.00% (168/175)</text>
 <rect x="24.0" y="104.0" width="487.1" height="330.0" fill="#6e7681"/>
 <rect x="24.0" y="104.0" width="48.7" height="41.2" fill="#2ea043"/>
@@ -407,7 +407,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <rect x="1071.3" y="788.0" width="104.7" height="120.0" fill="#2ea043"/>
 <rect x="1071.3" y="788.0" width="104.7" height="120.0" fill="none" stroke="#0d1117" stroke-width="3"/>
 <text x="1077.3" y="805.0" class="item">Optional FPS and coordinates HUD</text>
-<text x="24" y="948" class="group">Meteor Client: 17.44% (30/172)</text>
+<text x="24" y="948" class="group">Meteor Client: 18.02% (31/172)</text>
 <rect x="24.0" y="960.0" width="1131.9" height="200.0" fill="#6e7681"/>
 <rect x="24.0" y="960.0" width="36.5" height="33.3" fill="#2ea043"/>
 <rect x="60.5" y="960.0" width="36.5" height="33.3" fill="#2ea043"/>
@@ -436,6 +436,7 @@ text { font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fil
 <rect x="900.3" y="960.0" width="36.5" height="33.3" fill="#2ea043"/>
 <rect x="936.8" y="960.0" width="36.5" height="33.3" fill="#2ea043"/>
 <rect x="973.3" y="960.0" width="36.5" height="33.3" fill="#2ea043"/>
+<rect x="1009.9" y="960.0" width="36.5" height="33.3" fill="#2ea043"/>
 <line x1="60.5" y1="960.0" x2="60.5" y2="1160.0" stroke="#0d1117" stroke-opacity="0.35"/>
 <line x1="97.0" y1="960.0" x2="97.0" y2="1160.0" stroke="#0d1117" stroke-opacity="0.35"/>
 <line x1="133.5" y1="960.0" x2="133.5" y2="1160.0" stroke="#0d1117" stroke-opacity="0.35"/>

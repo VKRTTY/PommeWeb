@@ -131,29 +131,109 @@ pub fn tick(meteor: &mut MeteorClient, input: &InputState, game: &mut GameState)
         player.velocity.y = meteor.get_f64("fast-climb", "speed");
     }
 
-    // Flight, Velocity mode: no gravity, vertical keys move.
-    if meteor.is_active("flight") && meteor.get("flight", "mode").as_str() == Some("Velocity") {
-        player.flying = false;
-        player.velocity.x = 0.0;
-        player.velocity.z = 0.0;
-        player.velocity.y = 0.0;
-        let match_speed = if meteor.get_bool("flight", "vertical-speed-match") { 10.0 } else { 5.0 };
+    // Flight, as `Flight.java`: the yaw nudge while hanging still, the anti-kick
+    // counters, then the mode's movement.
+    {
+        let on = meteor.is_active("flight");
+        let abilities = meteor.get("flight", "mode").as_str() == Some("Abilities");
         let speed = meteor.get_f64("flight", "speed");
-        if jump {
-            player.velocity.y += speed * match_speed;
+        let creative = player.game_mode == 1;
+        if on && !meteor.memory.flight_was_on {
+            meteor.memory.flight_last_packet_y.set(f64::MAX);
+            meteor.memory.flight_delay_left = meteor.get_f64("flight", "delay") as i32;
+            meteor.memory.flight_off_left = meteor.get_f64("flight", "off-time") as i32;
         }
-        if sneak {
-            player.velocity.y -= speed * match_speed;
+        if !on && meteor.memory.flight_was_on {
+            // `onDeactivate`: Abilities mode gives the abilities back.
+            if meteor.get("flight", "mode").as_str() == Some("Abilities") && player.flying {
+                player.flying = false;
+                player.abilities_dirty = true;
+                player.fly_speed = 0.05;
+                if !creative {
+                    player.may_fly = false;
+                }
+            }
         }
-        if meteor.get_bool("flight", "no-sneak") {
-            player.on_ground = false;
+        meteor.memory.flight_was_on = on;
+        player.meteor_air_speed = None;
+        if on {
+            // onPreTick: a yaw flip every tick the player hangs motionless
+            // after a long fall.
+            let yaw = player.look_dir.y_rot_deg();
+            let still = (player.velocity.x.powi(2) + player.velocity.y.powi(2) + player.velocity.z.powi(2)).sqrt() < 0.003;
+            if player.fall_distance >= 3.0 && yaw == meteor.memory.flight_last_yaw && still {
+                let flip = if meteor.memory.flight_flip { 1.0 } else { -1.0 };
+                player.look_dir = crate::entity::components::LookDirection::new(yaw + flip, player.look_dir.x_rot_deg());
+                meteor.memory.flight_flip = !meteor.memory.flight_flip;
+            }
+            meteor.memory.flight_last_yaw = yaw;
+
+            // onPostTick: the delay and off-time of the anti-kick.
+            let anti_kick = meteor.index("flight").map(|i| meteor.value(i, "Anti Kick", "mode"));
+            let anti_kick = anti_kick.as_ref().and_then(|v| v.as_str()).unwrap_or("None").to_owned();
+            let (delay, off_time) = (meteor.get_f64("flight", "delay") as i32, meteor.get_f64("flight", "off-time") as i32);
+            if meteor.memory.flight_delay_left > 0 {
+                meteor.memory.flight_delay_left -= 1;
+            }
+            let mut skip = false;
+            if meteor.memory.flight_off_left <= 0 && meteor.memory.flight_delay_left <= 0 {
+                meteor.memory.flight_delay_left = delay;
+                meteor.memory.flight_off_left = off_time;
+                if anti_kick == "Packet" {
+                    // `setPositionReminder(20)`: a position packet next tick.
+                    game.position_send_counter = 20;
+                }
+            } else if meteor.memory.flight_delay_left <= 0 {
+                if anti_kick == "Normal" {
+                    if abilities {
+                        // abilitiesOff: flying off for the off-time.
+                        player.flying = false;
+                        player.abilities_dirty = true;
+                        player.fly_speed = 0.05;
+                        if !creative {
+                            player.may_fly = false;
+                        }
+                        skip = true;
+                    }
+                } else if anti_kick == "Packet" && meteor.memory.flight_off_left == off_time {
+                    game.position_send_counter = 20;
+                }
+                meteor.memory.flight_off_left -= 1;
+            }
+            if !skip {
+                if abilities {
+                    if player.game_mode != 3 {
+                        player.fly_speed = speed as f32;
+                        if !player.flying {
+                            player.flying = true;
+                            player.abilities_dirty = true;
+                        }
+                        if !creative {
+                            player.may_fly = true;
+                        }
+                    }
+                } else {
+                    // Velocity: no flying, all motion cleared, the vertical keys
+                    // add; the horizontal push is the air acceleration
+                    // `getFlyingSpeed` returns, `speed * 10` (15 sprinting).
+                    player.flying = false;
+                    player.velocity.x = 0.0;
+                    player.velocity.y = 0.0;
+                    player.velocity.z = 0.0;
+                    let step = speed * if meteor.get_bool("flight", "vertical-speed-match") { 10.0 } else { 5.0 };
+                    if jump {
+                        player.velocity.y += step;
+                    }
+                    if sneak {
+                        player.velocity.y -= step;
+                    }
+                    if meteor.get_bool("flight", "no-sneak") {
+                        player.on_ground = false;
+                    }
+                    player.meteor_air_speed = Some(speed as f32 * if player.sprinting { 15.0 } else { 10.0 });
+                }
+            }
         }
-    }
-    // Flight, Abilities mode: creative flight at the setting's speed.
-    if meteor.is_active("flight") && meteor.get("flight", "mode").as_str() == Some("Abilities") && player.game_mode != 3 {
-        player.fly_speed = meteor.get_f64("flight", "speed") as f32;
-        player.flying = true;
-        player.may_fly = true;
     }
 
     // HighJump: extra upward velocity on a jump from the ground.

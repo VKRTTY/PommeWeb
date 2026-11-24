@@ -8,6 +8,7 @@
 //! State saves to `<game dir>/meteor-client/modules.json`, as Meteor keeps
 //! its own folder in the game directory.
 
+pub mod esp;
 pub mod gui;
 pub mod hud;
 pub mod modules;
@@ -86,7 +87,7 @@ pub const PORTED: &[&str] = &[
     "fullbright", "zoom", "sprint", "auto-walk", "auto-jump", "step", "reach", "velocity",
     "jesus", "fast-climb", "flight", "high-jump", "no-fall", "speed", "spider", "air-jump",
     "long-jump", "anti-void", "auto-clicker", "anti-afk", "auto-respawn", "notifier", "kill-aura",
-    "timer", "fast-use", "break-delay", "parkour",
+    "timer", "fast-use", "break-delay", "parkour", "esp",
 ];
 
 /// One module's state.
@@ -153,7 +154,13 @@ impl MeteorClient {
             gui,
             hud: hud::HudState::default(),
             zoom: ZoomState { value: 1.0, time: 0.0 },
-            memory: modules::Memory::default(),
+            memory: {
+                let memory = modules::Memory::default();
+                memory.flight_last_packet_y.set(f64::MAX);
+                let mut memory = memory;
+                memory.timer_override = 1.0;
+                memory
+            },
             dirty: false,
             feedback: Vec::new(),
         }
@@ -179,6 +186,18 @@ impl MeteorClient {
             ));
         }
         self.dirty = true;
+    }
+
+    /// `Timer.getMultiplier`: an override (Speed's) wins, else the module's
+    /// multiplier while it's on.
+    pub fn timer_multiplier(&self) -> f64 {
+        if self.memory.timer_override != 1.0 {
+            self.memory.timer_override
+        } else if self.is_active("timer") {
+            self.get_f64("timer", "multiplier")
+        } else {
+            1.0
+        }
     }
 
     /// A setting's current value: changed, or Meteor's default.
