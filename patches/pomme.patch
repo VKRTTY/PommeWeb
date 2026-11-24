@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..5f144b0 100644
+index cfadfa1..84f6de3 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -469,7 +469,7 @@ index cfadfa1..5f144b0 100644
  
  use glam::{FloatExt, dvec3};
  use pomme_protocol::serverbound::{
-@@ -1015,9 +1015,11 @@ pub struct AppCore {
+@@ -1015,9 +1015,12 @@ pub struct AppCore {
      pub window_size: winit::dpi::LogicalSize<u32>,
      pub input: InputState,
      pub menu: MainMenu,
@@ -479,10 +479,11 @@ index cfadfa1..5f144b0 100644
      pub version: String,
 +    pub izu_hud: bool,
 +    pub izu_zoom: bool,
++    pub izu_ping: bool,
      builtin_resources: BuiltinRepositorySource,
      folder_resources: FolderRepositorySource,
      registered_resources: RegisteredRepositorySource,
-@@ -1160,7 +1162,7 @@ impl AppCore {
+@@ -1160,7 +1163,7 @@ impl AppCore {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -491,16 +492,17 @@ index cfadfa1..5f144b0 100644
          presence: Option<DiscordPresence>,
          user: UserData,
          window_size: winit::dpi::LogicalSize<u32>,
-@@ -1204,6 +1206,8 @@ impl AppCore {
+@@ -1204,6 +1207,9 @@ impl AppCore {
              tokio_rt,
              data_dirs,
              version,
 +            izu_hud: false,
 +            izu_zoom: false,
++            izu_ping: false,
              builtin_resources,
              folder_resources,
              registered_resources,
-@@ -1257,8 +1261,8 @@ impl AppCore {
+@@ -1257,8 +1263,8 @@ impl AppCore {
          self.registered_resources.set_symlink_policy(policy);
  
          let root = self.data_dirs.game_dir.join("resourcepacks");
@@ -511,7 +513,7 @@ index cfadfa1..5f144b0 100644
          {
              tracing::warn!(path = %root.display(), %error, "Cannot create resource pack directory");
          }
-@@ -2229,7 +2233,7 @@ impl AppCore {
+@@ -2229,7 +2235,7 @@ impl AppCore {
          let rx = &connection.event_rx;
  
          // Phase timers for the chunk-load benchmark's worst-frame breakdown.
@@ -520,7 +522,7 @@ index cfadfa1..5f144b0 100644
  
          // Block edits go on the priority lane so they apply instantly even while
          // chunks stream in, instead of starving behind the load backlog.
-@@ -2257,7 +2261,7 @@ impl AppCore {
+@@ -2257,7 +2263,7 @@ impl AppCore {
                      | NetworkEvent::LightUpdate { .. }
                      | NetworkEvent::ChunkBiomes { .. }
              )
@@ -529,7 +531,7 @@ index cfadfa1..5f144b0 100644
              match event {
                  NetworkEvent::ProtocolSelected { protocol } => game.select_protocol(protocol),
                  NetworkEvent::LoggedIn => {
-@@ -3811,14 +3815,14 @@ impl AppCore {
+@@ -3811,14 +3817,14 @@ impl AppCore {
          // New chunk loads mark themselves dirty when their queued light
          // applies (GameState::update_light), which raises this flag.
          let loads_happened = std::mem::take(&mut game.pending_load_rescan);
@@ -547,7 +549,7 @@ index cfadfa1..5f144b0 100644
          game.rescan_mesh_jobs(self.menu.chunk_detail);
          game.last_update_phases.rescan_ms = ms(t_rescan);
  
-@@ -3963,7 +3967,11 @@ impl AppCore {
+@@ -3963,7 +3969,11 @@ impl AppCore {
          }
  
          // Vanilla ticks the camera FOV interpolation even while dead.
@@ -561,7 +563,7 @@ index cfadfa1..5f144b0 100644
          renderer.update_fov_mod(compute_fov_modifier(&game.player, fov_effect_scale));
          // TODO: lava camera fluid (no eyes_in_lava).
 diff --git a/pomme-client/src/app/input/mod.rs b/pomme-client/src/app/input/mod.rs
-index 2073c61..97d0f93 100644
+index 2073c61..9805f1e 100644
 --- a/pomme-client/src/app/input/mod.rs
 +++ b/pomme-client/src/app/input/mod.rs
 @@ -123,7 +123,7 @@ pub struct InputState {
@@ -591,16 +593,18 @@ index 2073c61..97d0f93 100644
          self.apply_touch(held);
  
          if self.binding_capture {
-@@ -334,6 +334,9 @@ impl InputState {
+@@ -334,7 +334,10 @@ impl InputState {
                                      game.pause_screen = PauseScreen::Benchmark
                                  }
                                  PauseScreen::Benchmark => game.pause_screen = PauseScreen::Main,
+-                                PauseScreen::Main | PauseScreen::Hidden => game.paused = false,
 +                                PauseScreen::Advancements(_) => {
 +                                    game.pause_screen = PauseScreen::Main;
 +                                }
-                                 PauseScreen::Main | PauseScreen::Hidden => game.paused = false,
++                                PauseScreen::Main | PauseScreen::Hidden | PauseScreen::IzuModules => game.paused = false,
                              }
                          } else {
+                             game.paused = true;
 @@ -448,7 +451,7 @@ impl InputState {
      /// When a gamepad button was last pressed or a stick pushed past half
      /// way, which rules out a resting stick's drift. Pomme-only: vanilla has
@@ -703,7 +707,7 @@ index 51fb7e7..4fcbf6e 100644
  /// Vanilla `CLIENT_WAIT_TIMEOUT_MS`: let the player in regardless after this
  /// long, counted from the login/respawn that started the load.
 diff --git a/pomme-client/src/app/mod.rs b/pomme-client/src/app/mod.rs
-index e9b59ba..eabbc68 100644
+index e9b59ba..de1cf1d 100644
 --- a/pomme-client/src/app/mod.rs
 +++ b/pomme-client/src/app/mod.rs
 @@ -10,7 +10,8 @@ pub mod state_slot;
@@ -777,7 +781,7 @@ index e9b59ba..eabbc68 100644
          // In pixels, as vanilla's `--width` is, so shots are the same size at
          // any display scale.
          let size = core.window_size;
-@@ -908,6 +931,29 @@ impl ApplicationHandler for App {
+@@ -908,6 +931,42 @@ impl ApplicationHandler for App {
                          self.core.input.on_key_event(&event);
                          return app;
                      }
@@ -804,10 +808,23 @@ index e9b59ba..eabbc68 100644
 +                        }
 +                        return app;
 +                    }
++                    if self.core.izu_hud
++                        && event.state.is_pressed()
++                        && !event.repeat
++                        && key == Some(winit::keyboard::KeyCode::KeyI)
++                        && self.core.input.shift_only()
++                        && let AppPhase::InGame { game, gfx, .. } = &mut app
++                        && game.input_live()
++                    {
++                        game.paused = true;
++                        game.pause_screen = crate::ui::pause::PauseScreen::IzuModules;
++                        self.core.apply_cursor_grab(&gfx.window, Some(game));
++                        return app;
++                    }
                      // F3 held suppresses global keys (vanilla
                      // handleGlobalKeyPress); press only, no repeat.
                      if let Some(Gfx { window, .. }) = app.gfx_mut()
-@@ -1120,6 +1166,13 @@ impl ApplicationHandler for App {
+@@ -1120,6 +1179,13 @@ impl ApplicationHandler for App {
                                      }
                                  } else {
                                      match code {
@@ -821,7 +838,7 @@ index e9b59ba..eabbc68 100644
                                          // F3+Esc pauses without opening the
                                          // menu (vanilla pauseGame(true)).
                                          _ if self
-@@ -1522,9 +1575,14 @@ impl ApplicationHandler for App {
+@@ -1522,9 +1588,14 @@ impl ApplicationHandler for App {
                      // Paced here so input arriving during the wait is pumped before the next frame.
                      gfx.renderer.pace_frame();
                  }
@@ -837,7 +854,7 @@ index e9b59ba..eabbc68 100644
              _ => {}
          }
 diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
-index a9c5416..86044e1 100644
+index a9c5416..ba6f9e5 100644
 --- a/pomme-client/src/app/phases/in_game.rs
 +++ b/pomme-client/src/app/phases/in_game.rs
 @@ -1,7 +1,7 @@
@@ -894,7 +911,7 @@ index a9c5416..86044e1 100644
      // G quick actions, C/X creative saved hotbars, spectator hotbar select.
  
      // Finished F2 captures announce in chat (vanilla screenshot.success: bare
-@@ -3849,6 +3849,26 @@ pub fn update_game(
+@@ -3849,6 +3849,35 @@ pub fn update_game(
  
      // F1 hides the closed-chat overlay; an open chat is a screen and renders
      // regardless (vanilla Hud.extractChat vs ChatScreen).
@@ -911,7 +928,16 @@ index a9c5416..86044e1 100644
 +        } else {
 +            format!("Izu HUD  |  FPS: {fps}")
 +        };
-+        let text = if core.izu_zoom { format!("{text}  |  Zoom") } else { text };
++        let mut text = text;
++        if core.izu_zoom {
++            text.push_str("  |  Zoom");
++        }
++        if core.izu_ping {
++            match game.tab_list.players.get(&core.user.uuid).map(|entry| entry.latency) {
++                Some(ms) if ms >= 0 => text.push_str(&format!("  |  Ping: {ms}ms")),
++                _ => text.push_str("  |  Ping: N/A"),
++            }
++        }
 +        elements.push(MenuElement::Text {
 +            x: 4.0 * gs, y: 4.0 * gs, text,
 +            scale: crate::ui::common::FONT_SIZE * gs, color: [1.0; 4], centered: false,
@@ -921,7 +947,7 @@ index a9c5416..86044e1 100644
      if !game.hide_gui || game.chat.is_focused() {
          let dialog_open = game.dialog_open();
          let command_tree = game.command_tree.clone();
-@@ -3920,7 +3940,7 @@ pub fn update_game(
+@@ -3920,7 +3949,7 @@ pub fn update_game(
      // Vanilla Hud.extractSubtitleOverlay: drawn last when no screen or an
      // in-game one is open (then even with F1), else here under the screen.
      // The queue is empty while the option is off.
@@ -930,7 +956,7 @@ index a9c5416..86044e1 100644
      for ev in core.audio.take_subtitle_events() {
          game.subtitles
              .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
-@@ -4172,7 +4192,12 @@ pub fn update_game(
+@@ -4172,7 +4201,12 @@ pub fn update_game(
              .build(sw, sh, &menu_input, &mut core.input.key_bindings, |t, s| {
                  r.menu_text_width(t, s)
              });
@@ -944,25 +970,40 @@ index a9c5416..86044e1 100644
          core.input.clear_just_pressed_actions();
          core.sync_display_mode(&gfx.window);
      } else if game.death_screen_open && !dialog_open {
-@@ -4223,6 +4248,7 @@ pub fn update_game(
+@@ -4212,7 +4246,9 @@ pub fn update_game(
+         let clicked = core.input.left_just_pressed();
+         // Vanilla `PauseScreen.extractBackground`: blurred while the menu
+         // shows; F3+Esc's hidden pause draws nothing.
+-        elements.push(MenuElement::BlurBackground);
++        if !cfg!(target_arch = "wasm32") {
++            elements.push(MenuElement::BlurBackground);
++        }
+         pause_action = pause::build_pause_menu(
+             &mut elements,
+             sw,
+@@ -4223,6 +4259,9 @@ pub fn update_game(
              game.pause_screen,
              game.server_render_distance,
              game.singleplayer,
 +            &game.toasts,
++            core.izu_zoom,
++            core.izu_ping,
          );
          core.input.clear_just_pressed_actions();
      }
-@@ -5622,6 +5648,9 @@ pub fn update_game(
+@@ -5622,6 +5661,11 @@ pub fn update_game(
          PauseAction::Disconnect => {
              return GameUpdateResult::ManualDisconnect;
          }
 +        PauseAction::ShowAdvancements(page) => {
 +            game.pause_screen = PauseScreen::Advancements(page);
 +        }
++        PauseAction::ToggleIzuZoom => core.izu_zoom = !core.izu_zoom,
++        PauseAction::ToggleIzuPing => core.izu_ping = !core.izu_ping,
          PauseAction::OpenBenchmark => {
              game.pause_screen = PauseScreen::Benchmark;
          }
-@@ -5652,6 +5681,7 @@ pub fn update_game(
+@@ -5652,6 +5696,7 @@ pub fn update_game(
              game.paused = false;
              core.apply_cursor_grab(&gfx.window, Some(game));
          }
@@ -5213,43 +5254,56 @@ index 98f5d8f..b438db2 100644
          }
          y += btn_h + spacing;
 diff --git a/pomme-client/src/ui/pause.rs b/pomme-client/src/ui/pause.rs
-index 1090b90..99af369 100644
+index 1090b90..4151fff 100644
 --- a/pomme-client/src/ui/pause.rs
 +++ b/pomme-client/src/ui/pause.rs
-@@ -14,6 +14,7 @@ pub enum PauseScreen {
+@@ -14,6 +14,8 @@ pub enum PauseScreen {
      #[default]
      Main,
      Benchmark,
 +    Advancements(usize),
++    IzuModules,
      ChunkLoader,
      /// F3+Esc: paused with no menu rendered (vanilla `pauseGame(true)`).
      Hidden,
-@@ -26,6 +27,8 @@ pub enum PauseAction {
+@@ -26,6 +28,10 @@ pub enum PauseAction {
      Disconnect,
      Options,
      ReportBugs,
 +    GiveFeedback,
 +    ShowAdvancements(usize),
++    ToggleIzuZoom,
++    ToggleIzuPing,
      OpenBenchmark,
      StartFpsBenchmark,
      OpenChunkLoader,
-@@ -44,6 +47,7 @@ pub fn build_pause_menu(
+@@ -44,6 +50,9 @@ pub fn build_pause_menu(
      screen: PauseScreen,
      server_rd: u32,
      singleplayer: bool,
 +    toasts: &crate::ui::toast::ToastState,
++    izu_zoom: bool,
++    izu_ping: bool,
  ) -> PauseAction {
      match screen {
          // The F3+Esc pause renders nothing; update_game skips building it.
-@@ -57,6 +61,7 @@ pub fn build_pause_menu(
+@@ -57,6 +66,15 @@ pub fn build_pause_menu(
              gs,
              singleplayer,
          ),
 +        PauseScreen::Advancements(page) => build_advancements(elements, screen_w, screen_h, cursor, clicked, gs, toasts, page),
++        PauseScreen::IzuModules => build_submenu(
++            elements, screen_w, screen_h, cursor, clicked, gs, "Izu Modules", None,
++            &[
++                (if izu_zoom { "Zoom: ON" } else { "Zoom: OFF" }, PauseAction::ToggleIzuZoom),
++                (if izu_ping { "Ping: ON" } else { "Ping: OFF" }, PauseAction::ToggleIzuPing),
++                ("Done", PauseAction::Resume),
++            ],
++        ),
          PauseScreen::Benchmark => build_submenu(
              elements,
              screen_w,
-@@ -157,7 +162,7 @@ fn build_main(
+@@ -157,7 +175,7 @@ fn build_main(
          action = PauseAction::Resume;
      }
  
@@ -5258,7 +5312,7 @@ index 1090b90..99af369 100644
          elements,
          cursor,
          col1_x,
-@@ -167,8 +172,10 @@ fn build_main(
+@@ -167,8 +185,10 @@ fn build_main(
          gs,
          fs,
          "Advancements",
@@ -5271,7 +5325,7 @@ index 1090b90..99af369 100644
      common::push_button(
          elements,
          cursor,
-@@ -182,7 +189,7 @@ fn build_main(
+@@ -182,7 +202,7 @@ fn build_main(
          false,
      );
  
@@ -5280,7 +5334,7 @@ index 1090b90..99af369 100644
          elements,
          cursor,
          col1_x,
-@@ -192,8 +199,11 @@ fn build_main(
+@@ -192,8 +212,11 @@ fn build_main(
          gs,
          fs,
          "Give Feedback",
@@ -5294,7 +5348,7 @@ index 1090b90..99af369 100644
      if common::push_button(
          elements,
          cursor,
-@@ -326,3 +336,54 @@ fn build_submenu(
+@@ -326,3 +349,54 @@ fn build_submenu(
  
      action
  }
