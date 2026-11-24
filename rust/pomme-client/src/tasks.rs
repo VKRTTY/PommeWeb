@@ -29,6 +29,47 @@ pub fn runtime() -> Runtime {
 #[cfg(not(target_arch = "wasm32"))]
 pub use tokio::spawn;
 
+/// Work handed to another thread; the browser has none to spare, so there
+/// it's done on the spot and the job is born finished.
+pub struct Job<T>(
+    #[cfg(not(target_arch = "wasm32"))] std::thread::JoinHandle<T>,
+    #[cfg(target_arch = "wasm32")] T,
+);
+
+pub fn spawn_job<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Job<T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    return Job(std::thread::spawn(work));
+    #[cfg(target_arch = "wasm32")]
+    Job(work())
+}
+
+impl<T> Job<T> {
+    pub fn is_finished(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        return self.0.is_finished();
+        #[cfg(target_arch = "wasm32")]
+        true
+    }
+
+    pub fn join(self) -> std::thread::Result<T> {
+        #[cfg(not(target_arch = "wasm32"))]
+        return self.0.join();
+        #[cfg(target_arch = "wasm32")]
+        Ok(self.0)
+    }
+}
+
+/// Runs `future` in the background with nothing waiting on it.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn spawn_detached(future: impl std::future::Future<Output = ()> + Send + 'static) {
+    drop(tokio::spawn(future));
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn spawn_detached(future: impl std::future::Future<Output = ()> + 'static) {
+    wasm_bindgen_futures::spawn_local(future);
+}
+
 #[cfg(target_arch = "wasm32")]
 pub use browser::{Runtime, Task, spawn};
 

@@ -7,24 +7,38 @@
 <style>
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
   canvas { display: block; width: 100vw; height: 100vh; outline: none; }
-  #status { position: fixed; inset: auto 0 1rem 0; text-align: center; color: #aaa;
-    font: 14px system-ui, sans-serif; pointer-events: none; }
+  /* Vanilla's LoadingOverlay: the logo is centered, as wide as the smaller
+     of 75% of the width and the height; the bar is as wide, at 83.25% of
+     the height. */
+  #loading {
+    --w: min(75vw, 100vh);
+    --gs: 2px; /* vanilla's GUI scale, set by main.mjs */
+    position: fixed; inset: 0; background: #ef323d; transition: opacity .4s;
+  }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #logo {
+    position: absolute; left: 50%; top: 50%; width: var(--w); height: calc(var(--w) / 4);
+    transform: translate(-50%, -50%); display: flex;
+  }
+  /* The texture holds the wordmark's left half above its right half. */
+  #logo div { flex: 1; background-size: 100% 200%; background-repeat: no-repeat; }
+  #logo div + div { background-position: 0 100%; }
+  /* LoadingOverlay.drawProgressBar: 10 units tall, a one-unit outline, the
+     fill one unit inside it. */
+  #bar {
+    position: absolute; left: 50%; top: 83.25vh; width: var(--w); height: calc(var(--gs) * 10);
+    transform: translate(-50%, -50%); box-sizing: border-box;
+    border: var(--gs) solid #fff; padding: var(--gs);
+  }
+  #fill { height: 100%; width: 0; background: #fff; }
+  /* Drawn in the game's own font (main.mjs), under the bar. */
+  #status { position: absolute; left: 0; top: calc(83.25vh + var(--gs) * 11);
+    width: 100vw; height: calc(var(--gs) * 10); image-rendering: pixelated; }
 </style>
 </head>
 <body>
 <canvas id="pomme" tabindex="0"></canvas>
-<div id="status">Loading Pomme…</div>
-<script type="module">
-  import init, {start} from './pomme.js';
-  const status = document.getElementById('status');
-  try {
-    await init();
-    status.textContent = '';
-    await start(document.getElementById('pomme'));
-  } catch (e) {
-    console.error(e);
-    status.textContent = 'Pomme failed to start: ' + (e?.message ?? e);
-  }
-</script>
+<div id="loading"><div id="logo"><div></div><div></div></div><div id="bar"><div id="fill"></div></div><canvas id="status"></canvas></div>
+<script type="module" src="./main.mjs"></script>
 </body>
 </html>

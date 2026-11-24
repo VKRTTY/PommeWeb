@@ -11,7 +11,11 @@ TOOLCHAIN="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$REPO/rust-toolchain.toml")"
 
 # The repo pins a rustup nightly; a Homebrew cargo earlier on PATH has no
 # wasm32 standard library.
-export PATH="$HOME/.rustup/toolchains/$TOOLCHAIN-$(rustc -vV | sed -n 's/^host: //p')/bin:$PATH"
+TOOLCHAIN_DIR="$HOME/.rustup/toolchains/$TOOLCHAIN-$(rustc -vV | sed -n 's/^host: //p')"
+export PATH="$TOOLCHAIN_DIR/bin:$PATH"
+# This nightly's rust-lld looks for libLLVM beside itself rather than in the
+# toolchain's lib/.
+export DYLD_FALLBACK_LIBRARY_PATH="$TOOLCHAIN_DIR/lib"
 
 cd "$REPO"
 flag=""
@@ -27,6 +31,6 @@ BINDGEN="$HERE/tools/wasm-bindgen"
   echo "Install wasm-bindgen 0.2.121: cargo install wasm-bindgen-cli --version 0.2.121" >&2; exit 1; }
 "$BINDGEN" --target web --no-typescript --out-dir "$DIST" --out-name pomme \
   "$REPO/target/wasm32-unknown-unknown/$PROFILE/pomme_client.wasm"
-cp "$HERE"/web/*.mjs "$HERE"/web/index.html "$DIST"/
+cp "$HERE"/web/*.mjs "$HERE"/web/sw.js "$HERE"/web/index.html "$DIST"/
 rm -f "$DIST"/*.test.mjs
 echo "Built $DIST"

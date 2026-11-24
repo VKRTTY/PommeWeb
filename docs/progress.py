@@ -78,7 +78,11 @@ def main():
     done = sum(i["done"] for g in groups for i in g["items"])
     total = sum(i["total"] for g in groups for i in g["items"])
     body, y = [], 70
-    body.append(f'<text x="24" y="40" class="title">{escape(data["title"])}: {pct(done, total)}</text>')
+    # Each group counts the same, so a large group of small pieces can't
+    # carry the whole.
+    shares = [sum(i["done"] for i in g["items"]) / sum(i["total"] for i in g["items"]) for g in groups]
+    overall = 100 * sum(shares) / len(shares)
+    body.append(f'<text x="24" y="40" class="title">{escape(data["title"])}: {overall:.2f}%</text>')
     for group in groups:
         g_done = sum(i["done"] for i in group["items"])
         g_total = sum(i["total"] for i in group["items"])
@@ -103,7 +107,7 @@ text {{ font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fi
 </svg>
 '''
     (HERE / "progress.svg").write_text(svg)
-    print(f"progress.svg: {pct(done, total)}")
+    print(f"progress.svg: {overall:.2f}%")
 
 
 if __name__ == "__main__":

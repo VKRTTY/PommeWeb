@@ -1,5 +1,5 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index e6250f3..d966502 100644
+index e6250f3..2a17ef2 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -3083,6 +3083,7 @@ dependencies = [
@@ -28,21 +28,32 @@ index e6250f3..d966502 100644
   "libloading 0.9.1",
   "libmimalloc-sys",
   "md-5",
-@@ -4165,6 +4170,8 @@ dependencies = [
+@@ -4165,6 +4170,10 @@ dependencies = [
   "tracing-appender",
   "tracing-subscriber",
   "uuid 1.29.2",
 + "wasm-bindgen",
 + "wasm-bindgen-futures",
++ "web-sys",
++ "web-time",
   "winit",
   "winresource",
   "zip 9.4.1",
-@@ -4195,12 +4202,17 @@ dependencies = [
+@@ -4176,6 +4185,7 @@ version = "0.1.0"
+ dependencies = [
+  "directories",
+  "serde_json",
++ "web-time",
+ ]
+ 
+ [[package]]
+@@ -4195,12 +4205,18 @@ dependencies = [
  name = "pomme-install"
  version = "0.1.0"
  dependencies = [
 + "futures-util",
 + "js-sys",
++ "pomme-dirs",
   "reqwest",
   "serde",
   "serde_json",
@@ -55,7 +66,7 @@ index e6250f3..d966502 100644
   "zip 9.4.1",
  ]
  
-@@ -5357,8 +5369,6 @@ dependencies = [
+@@ -5357,8 +5373,6 @@ dependencies = [
  [[package]]
  name = "simdnbt"
  version = "0.10.0"
@@ -64,6 +75,14 @@ index e6250f3..d966502 100644
  dependencies = [
   "byteorder",
   "flate2",
+@@ -5998,6 +6012,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "cdb87b95ec50ddfa440816d227a17b2ccbdda963a316a727fda0fc4334f7d134"
+ dependencies = [
+  "deranged",
++ "js-sys",
+  "libc",
+  "num-conv",
+  "num_threads",
 diff --git a/Cargo.toml b/Cargo.toml
 index e3e91cd..a19e79f 100644
 --- a/Cargo.toml
@@ -131,7 +150,7 @@ index 060113e..46de91b 100644
  pub use device_code::{DeviceCode, device_code_sign_in};
  use serde::{Deserialize, Serialize};
 diff --git a/pomme-client/Cargo.toml b/pomme-client/Cargo.toml
-index 10482e5..89b9bfe 100644
+index 10482e5..e9b8381 100644
 --- a/pomme-client/Cargo.toml
 +++ b/pomme-client/Cargo.toml
 @@ -22,6 +22,7 @@ test-harness = ["dep:toml"]
@@ -177,7 +196,7 @@ index 10482e5..89b9bfe 100644
  # The packet stream cipher (`net::crypt`).
  aes = "0.9"
  cfb8 = "0.9"
-@@ -90,18 +82,42 @@ fontdue = "0.9.3"
+@@ -90,18 +82,48 @@ fontdue = "0.9.3"
  freetype-rs = { version = "0.38", optional = true }
  simdnbt = "0.10"
  scopeguard = "1.2"
@@ -187,6 +206,9 @@ index 10482e5..89b9bfe 100644
  criterion = { version = "=0.8.2", default-features = false, optional = true }
  symphonia = { version = "0.5.5", default-features = false, features = ["ogg", "vorbis"] }
  fastrand = "2"
++# std::time::Instant and SystemTime panic in the browser; this is them on
++# desktop and the page's clock there.
++web-time = "1.1"
  gilrs = "0.11.2"
  
 +[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -213,6 +235,9 @@ index 10482e5..89b9bfe 100644
 +uuid = { version = "1", features = ["js"] }
 +js-sys = "0.3"
 +wasm-bindgen = "0.2"
++web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
++# `OffsetDateTime::now_utc` from the page's clock.
++time = { version = "0.3", features = ["wasm-bindgen"] }
 +wasm-bindgen-futures = "0.4"
 +pomme-auth = { path = "../pomme-auth" }
 +
@@ -224,7 +249,7 @@ index 10482e5..89b9bfe 100644
  pyronyx = { workspace = true, features = ["rwh_06"] }
  arboard = { version = "3", features = ["wayland-data-control"] }
  
-@@ -109,11 +125,11 @@ arboard = { version = "3", features = ["wayland-data-control"] }
+@@ -109,11 +131,11 @@ arboard = { version = "3", features = ["wayland-data-control"] }
  # one gets an error instead of the exe failing to start. Apple platforms keep
  # linking the loader releases bundle; Android's is always there. build.rs
  # mirrors this target as `cfg(vulkan_loaded)`.
@@ -294,10 +319,81 @@ index e07e711..16314a5 100644
          let out_name = format!("{file}.spv");
          let out_path = Path::new(&out_dir).join(&out_name);
          fs::write(&out_path, artifact.as_binary_u8())
+diff --git a/pomme-client/src/account.rs b/pomme-client/src/account.rs
+index ad6b7c1..3f77bd0 100644
+--- a/pomme-client/src/account.rs
++++ b/pomme-client/src/account.rs
+@@ -14,13 +14,56 @@ pub fn store(game_dir: &Path) -> Box<dyn SecretStore> {
+     return Box::new(pomme_auth::FileStore {
+         path: game_dir.join("accounts.json"),
+     });
+-    #[cfg(not(target_os = "android"))]
++    #[cfg(target_arch = "wasm32")]
++    {
++        let _ = game_dir;
++        Box::new(WebStore)
++    }
++    #[cfg(not(any(target_os = "android", target_arch = "wasm32")))]
+     {
+         let _ = game_dir;
+         Box::new(pomme_auth::KeyringStore)
+     }
+ }
+ 
++/// The page's `localStorage`, under a `pomme-` prefix: the browser keeps
++/// it per site.
++#[cfg(target_arch = "wasm32")]
++struct WebStore;
++
++#[cfg(target_arch = "wasm32")]
++impl WebStore {
++    fn storage() -> Option<js_sys::Object> {
++        use wasm_bindgen::JsCast;
++        js_sys::Reflect::get(&js_sys::global(), &"localStorage".into())
++            .ok()?
++            .dyn_into()
++            .ok()
++    }
++
++    fn call(name: &str, args: &[&str]) -> Option<wasm_bindgen::JsValue> {
++        use wasm_bindgen::JsCast;
++        let storage = Self::storage()?;
++        let method: js_sys::Function = js_sys::Reflect::get(&storage, &name.into())
++            .ok()?
++            .dyn_into()
++            .ok()?;
++        let args: js_sys::Array = args.iter().map(|a| wasm_bindgen::JsValue::from_str(a)).collect();
++        method.apply(&storage, &args).ok()
++    }
++}
++
++#[cfg(target_arch = "wasm32")]
++impl SecretStore for WebStore {
++    fn read(&self, key: &str) -> Option<String> {
++        Self::call("getItem", &[&format!("pomme-{key}")])?.as_string()
++    }
++
++    fn write(&self, key: &str, value: &str) {
++        Self::call("setItem", &[&format!("pomme-{key}"), value]);
++    }
++}
++
+ /// Removes `uuid`'s stored account, whichever way its uuid was written.
+ pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
+     if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..3d8d522 100644
+index cfadfa1..6610f5b 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
+@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
+ use std::ops::Add;
+ use std::rc::Rc;
+ use std::sync::Arc;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use glam::{FloatExt, dvec3};
+ use pomme_protocol::serverbound::{
 @@ -1015,7 +1015,7 @@ pub struct AppCore {
      pub window_size: winit::dpi::LogicalSize<u32>,
      pub input: InputState,
@@ -316,6 +412,135 @@ index cfadfa1..3d8d522 100644
          presence: Option<DiscordPresence>,
          user: UserData,
          window_size: winit::dpi::LogicalSize<u32>,
+@@ -1257,8 +1257,8 @@ impl AppCore {
+         self.registered_resources.set_symlink_policy(policy);
+ 
+         let root = self.data_dirs.game_dir.join("resourcepacks");
+-        if !root.is_dir()
+-            && let Err(error) = std::fs::create_dir_all(&root)
++        if !pomme_dirs::fs::is_dir(&root)
++            && let Err(error) = pomme_dirs::fs::create_dir_all(&root)
+         {
+             tracing::warn!(path = %root.display(), %error, "Cannot create resource pack directory");
+         }
+@@ -2229,7 +2229,7 @@ impl AppCore {
+         let rx = &connection.event_rx;
+ 
+         // Phase timers for the chunk-load benchmark's worst-frame breakdown.
+-        let t_net = std::time::Instant::now();
++        let t_net = web_time::Instant::now();
+ 
+         // Block edits go on the priority lane so they apply instantly even while
+         // chunks stream in, instead of starving behind the load backlog.
+@@ -2257,7 +2257,7 @@ impl AppCore {
+                     | NetworkEvent::LightUpdate { .. }
+                     | NetworkEvent::ChunkBiomes { .. }
+             )
+-            .then(std::time::Instant::now);
++            .then(web_time::Instant::now);
+             match event {
+                 NetworkEvent::ProtocolSelected { protocol } => game.select_protocol(protocol),
+                 NetworkEvent::LoggedIn => {
+@@ -3811,14 +3811,14 @@ impl AppCore {
+         // New chunk loads mark themselves dirty when their queued light
+         // applies (GameState::update_light), which raises this flag.
+         let loads_happened = std::mem::take(&mut game.pending_load_rescan);
+-        let ms = |t: std::time::Instant| t.elapsed().as_secs_f32() * 1000.0;
++        let ms = |t: web_time::Instant| t.elapsed().as_secs_f32() * 1000.0;
+         game.last_update_phases.net_decode_ms = ms(t_net);
+ 
+-        let t_vis = std::time::Instant::now();
++        let t_vis = web_time::Instant::now();
+         game.update_visibility(renderer, player_chunk, loads_happened);
+         game.last_update_phases.visibility_ms = ms(t_vis);
+ 
+-        let t_rescan = std::time::Instant::now();
++        let t_rescan = web_time::Instant::now();
+         game.rescan_mesh_jobs(self.menu.chunk_detail);
+         game.last_update_phases.rescan_ms = ms(t_rescan);
+ 
+diff --git a/pomme-client/src/app/input/mod.rs b/pomme-client/src/app/input/mod.rs
+index 2073c61..5c1b8d4 100644
+--- a/pomme-client/src/app/input/mod.rs
++++ b/pomme-client/src/app/input/mod.rs
+@@ -123,7 +123,7 @@ pub struct InputState {
+     weak_rumble_effect: Option<Effect>,
+     strong_rumble_effect: Option<Effect>,
+     active_gamepad_id: Option<GamepadId>,
+-    gamepad_used_at: std::time::Instant,
++    gamepad_used_at: web_time::Instant,
+     recent_actions: HashMap<Action, bool>,
+     touch_actions_down: HashSet<Action>,
+     /// Touch taps' releases, held back until the presses have been read.
+@@ -243,7 +243,7 @@ impl InputState {
+             weak_rumble_effect: weak_effect,
+             strong_rumble_effect: strong_effect,
+             active_gamepad_id: None,
+-            gamepad_used_at: std::time::Instant::now(),
++            gamepad_used_at: web_time::Instant::now(),
+             recent_actions: HashMap::new(),
+             touch_actions_down: HashSet::new(),
+             tap_releases: Vec::new(),
+@@ -260,7 +260,7 @@ impl InputState {
+         }
+         let held = self
+             .touch
+-            .tick(std::time::Instant::now(), phase.get().world_has_pointer());
++            .tick(web_time::Instant::now(), phase.get().world_has_pointer());
+         self.apply_touch(held);
+ 
+         if self.binding_capture {
+@@ -448,7 +448,7 @@ impl InputState {
+     /// When a gamepad button was last pressed or a stick pushed past half
+     /// way, which rules out a resting stick's drift. Pomme-only: vanilla has
+     /// no gamepad to count as input for its AFK frame limit.
+-    pub fn gamepad_used_at(&self) -> std::time::Instant {
++    pub fn gamepad_used_at(&self) -> web_time::Instant {
+         self.gamepad_used_at
+     }
+ 
+@@ -459,7 +459,7 @@ impl InputState {
+             gilrs::EventType::AxisChanged(_, value, _) => value.abs() > 0.5,
+             _ => false,
+         } {
+-            self.gamepad_used_at = std::time::Instant::now();
++            self.gamepad_used_at = web_time::Instant::now();
+         }
+ 
+         if let gilrs::EventType::ButtonReleased(button, _) = event.event {
+@@ -1185,7 +1185,7 @@ impl InputState {
+             p,
+             gameplay,
+             layout,
+-            std::time::Instant::now(),
++            web_time::Instant::now(),
+         );
+         self.apply_touch(out);
+     }
+diff --git a/pomme-client/src/app/input/touch.rs b/pomme-client/src/app/input/touch.rs
+index 867df27..f9f50ba 100644
+--- a/pomme-client/src/app/input/touch.rs
++++ b/pomme-client/src/app/input/touch.rs
+@@ -4,7 +4,8 @@
+ //! mouse pointer, so every screen works unchanged.
+ 
+ use std::collections::HashMap;
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use glam::Vec2;
+ use winit::event::TouchPhase;
+@@ -305,7 +306,8 @@ impl TouchControls {
+ 
+ #[cfg(test)]
+ mod tests {
+-    use std::time::{Duration, Instant};
++    use std::time::Duration;
++use web_time::Instant;
+ 
+     use glam::Vec2;
+     use winit::event::TouchPhase;
 diff --git a/pomme-client/src/app/install.rs b/pomme-client/src/app/install.rs
 index 04aabb8..7acbc95 100644
 --- a/pomme-client/src/app/install.rs
@@ -341,11 +566,35 @@ index 04aabb8..7acbc95 100644
              Job::Update => {
                  let channel = core.menu.update_channel();
                  Box::pin(async move {
+diff --git a/pomme-client/src/app/level_load.rs b/pomme-client/src/app/level_load.rs
+index 51fb7e7..4fcbf6e 100644
+--- a/pomme-client/src/app/level_load.rs
++++ b/pomme-client/src/app/level_load.rs
+@@ -8,7 +8,8 @@
+ //! until then. The server-progress half of the vanilla class (the loading
+ //! screen's progress bar, `LevelLoadListener`) is not ported.
+ 
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ /// Vanilla `CLIENT_WAIT_TIMEOUT_MS`: let the player in regardless after this
+ /// long, counted from the login/respawn that started the load.
 diff --git a/pomme-client/src/app/mod.rs b/pomme-client/src/app/mod.rs
-index e9b59ba..2781e17 100644
+index e9b59ba..aa95080 100644
 --- a/pomme-client/src/app/mod.rs
 +++ b/pomme-client/src/app/mod.rs
-@@ -257,7 +257,7 @@ impl App {
+@@ -10,7 +10,8 @@ pub mod state_slot;
+ use std::mem::ManuallyDrop;
+ use std::rc::Rc;
+ use std::sync::Arc;
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use thiserror::Error;
+ use winit::application::ApplicationHandler;
+@@ -257,7 +258,7 @@ impl App {
      pub fn new(
          version: String,
          data_dirs: DataDirs,
@@ -354,6 +603,194 @@ index e9b59ba..2781e17 100644
          presence: Option<crate::discord::DiscordPresence>,
          user: UserData,
          quick_play: Option<QuickPlay>,
+@@ -472,6 +473,10 @@ impl App {
+         if let Some(gfx) = self.phase.gfx_mut() {
+             gfx.window.request_redraw();
+         }
++        #[cfg(target_arch = "wasm32")]
++        if self.phase.gfx_mut().is_some() {
++            crate::web_page::ready();
++        }
+     }
+ 
+     /// Updates a release build to the newest release before the menu.
+@@ -511,6 +516,13 @@ impl App {
+         Ok(())
+     }
+ 
++    /// Hands the app to the page's event loop, which owns it from then on.
++    #[cfg(target_arch = "wasm32")]
++    pub fn spawn(self, event_loop: EventLoop<()>) {
++        use winit::platform::web::EventLoopExtWebSys;
++        event_loop.spawn_app(self);
++    }
++
+     /// A text field has keyboard focus: chat and the in-game fields, or a
+     /// menu form's.
+     #[cfg(mobile)]
+@@ -664,7 +676,16 @@ fn create_window(
+         .with_visible(cfg!(mobile))
+         .with_active(!core.test_window)
+         .with_window_icon(window_icon);
+-    if core.test_window {
++    // The page's canvas, sized by the page.
++    #[cfg(target_arch = "wasm32")]
++    {
++        use winit::platform::web::WindowAttributesExtWebSys;
++        window_attrs = window_attrs
++            .with_canvas(crate::CANVAS.with_borrow(Clone::clone))
++            .with_visible(true);
++    }
++    if cfg!(target_arch = "wasm32") {
++    } else if core.test_window {
+         // In pixels, as vanilla's `--width` is, so shots are the same size at
+         // any display scale.
+         let size = core.window_size;
+@@ -1522,9 +1543,14 @@ impl ApplicationHandler for App {
+                     // Paced here so input arriving during the wait is pumped before the next frame.
+                     gfx.renderer.pace_frame();
+                 }
++                // The page's frame callback paces the browser build, which
++                // can't sleep.
++                #[cfg(not(target_arch = "wasm32"))]
+                 if let Some(fps) = limit {
+                     self.fps_limiter.limit_display_fps(fps);
+                 }
++                #[cfg(target_arch = "wasm32")]
++                let _ = limit;
+             }
+             _ => {}
+         }
+diff --git a/pomme-client/src/app/phases/in_game.rs b/pomme-client/src/app/phases/in_game.rs
+index a9c5416..4935f96 100644
+--- a/pomme-client/src/app/phases/in_game.rs
++++ b/pomme-client/src/app/phases/in_game.rs
+@@ -1,7 +1,7 @@
+ use std::collections::{HashMap, HashSet};
+ use std::rc::Rc;
+ use std::sync::Arc;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use glam::FloatExt as _;
+ use pomme_item::components::EquipmentSlot;
+@@ -1822,7 +1822,7 @@ impl GameState {
+     /// in before the game phase takes over.
+     pub fn drain_and_upload_meshes(&mut self, renderer: &mut Renderer) {
+         let mut batch = self.drain_meshes();
+-        let upload_start = std::time::Instant::now();
++        let upload_start = web_time::Instant::now();
+         renderer.upload_distant(self.distant.drain());
+         let (wanted, gone) = renderer.take_distant_requests();
+         self.distant.request(wanted, gone);
+@@ -1846,7 +1846,7 @@ impl GameState {
+     /// The meshes still waiting to upload and then the frame's ready ones,
+     /// stale ones dropped.
+     pub fn drain_meshes(&mut self) -> Vec<ChunkMeshData> {
+-        let drain_start = std::time::Instant::now();
++        let drain_start = web_time::Instant::now();
+         let mut batch = std::mem::take(&mut self.pending_upload);
+         for mesh in self.mesh_dispatcher.drain_results(batch.len()) {
+             // Stale meshes count too: worker time spent is worker time spent.
+@@ -1896,7 +1896,7 @@ impl GameState {
+         // an opened one yet.
+         let mut tracker = LevelLoadTracker::start_client_load(
+             std::time::Duration::ZERO,
+-            std::time::Instant::now(),
++            web_time::Instant::now(),
+         );
+         // 1.20.1 and 1.20.2 have no LEVEL_CHUNKS_LOAD_START game event (1.20.4
+         // added it), so nothing would ever move the tracker on; those clients
+@@ -3173,7 +3173,7 @@ pub fn update_game(
+ ) -> GameUpdateResult {
+     // Snapshot last frame's phase timings before this frame overwrites them: they
+     // align with `raw_dt`, which measures the previous frame's full duration.
+-    let frame_start = std::time::Instant::now();
++    let frame_start = web_time::Instant::now();
+     let prev_phases = game.last_update_phases;
+ 
+     // Position the audio listener at the player's head and push current
+@@ -3920,7 +3920,7 @@ pub fn update_game(
+     // Vanilla Hud.extractSubtitleOverlay: drawn last when no screen or an
+     // in-game one is open (then even with F1), else here under the screen.
+     // The queue is empty while the option is off.
+-    let subtitle_now = std::time::Instant::now();
++    let subtitle_now = web_time::Instant::now();
+     for ev in core.audio.take_subtitle_events() {
+         game.subtitles
+             .on_play_sound(&ev.key, *ev.pos, ev.range, subtitle_now);
+diff --git a/pomme-client/src/app/phases/mod.rs b/pomme-client/src/app/phases/mod.rs
+index 4dfe6b5..1758dff 100644
+--- a/pomme-client/src/app/phases/mod.rs
++++ b/pomme-client/src/app/phases/mod.rs
+@@ -1,7 +1,7 @@
+ use std::collections::VecDeque;
+ use std::mem::ManuallyDrop;
+ use std::sync::Arc;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use winit::window::Window;
+ 
+diff --git a/pomme-client/src/args.rs b/pomme-client/src/args.rs
+index 37c4b2a..ad8a632 100644
+--- a/pomme-client/src/args.rs
++++ b/pomme-client/src/args.rs
+@@ -117,7 +117,7 @@ impl LaunchArgs {
+     /// phone dev recipes write. A missing file is no arguments; a bad one is
+     /// logged and ignored.
+     pub fn from_file(path: &std::path::Path) -> Self {
+-        let text = std::fs::read_to_string(path).unwrap_or_default();
++        let text = pomme_dirs::fs::read_to_string(path).unwrap_or_default();
+         Self::from_words(&text).unwrap_or_else(|e| {
+             tracing::error!("{}: {e}", path.display());
+             Self::from_words("").expect("no arguments always parse")
+diff --git a/pomme-client/src/audio/embedded_openal.rs b/pomme-client/src/audio/embedded_openal.rs
+index a9d05b3..100e1b0 100644
+--- a/pomme-client/src/audio/embedded_openal.rs
++++ b/pomme-client/src/audio/embedded_openal.rs
+@@ -2,7 +2,7 @@
+ //! into Pomme's data folder to load, as the vanilla launcher unpacks LWJGL's
+ //! copy from its jar. Other builds carry none.
+ 
+-use std::fs;
++use pomme_dirs::fs;
+ use std::path::{Path, PathBuf};
+ 
+ const LIBRARY: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/openal-embedded"));
+@@ -105,7 +105,7 @@ mod tests {
+         // An unpacked library is left as it is.
+         fs::remove_file(dir.join(NOTICES[0].0)).unwrap();
+         unpack_to(&natives, "openal-1", "OpenAL.dll", b"library").unwrap();
+-        assert!(!dir.join(NOTICES[0].0).exists());
++        assert!(!pomme_dirs::fs::exists(&dir.join(NOTICES[0].0)));
+         fs::remove_dir_all(&natives).unwrap();
+     }
+ 
+@@ -123,9 +123,9 @@ mod tests {
+         fs::create_dir_all(natives.join("other")).unwrap();
+         unpack_to(&natives, "openal-1", "OpenAL.dll", b"old").unwrap();
+         unpack_to(&natives, "openal-2", "OpenAL.dll", b"new").unwrap();
+-        assert!(!natives.join("openal-1").exists());
+-        assert!(natives.join("openal-2/OpenAL.dll").exists());
+-        assert!(natives.join("other").exists());
++        assert!(!pomme_dirs::fs::exists(&natives.join("openal-1")));
++        assert!(pomme_dirs::fs::exists(&natives.join("openal-2/OpenAL.dll")));
++        assert!(pomme_dirs::fs::exists(&natives.join("other")));
+         fs::remove_dir_all(&natives).unwrap();
+     }
+ 
+@@ -142,8 +142,8 @@ mod tests {
+ 
+         write(b"a player's build");
+         remove_copy(&dir, "OpenAL.dll", b"library");
+-        assert!(dir.join("OpenAL.dll").exists());
+-        assert!(dir.join(NOTICES[1].0).exists());
++        assert!(pomme_dirs::fs::exists(&dir.join("OpenAL.dll")));
++        assert!(pomme_dirs::fs::exists(&dir.join(NOTICES[1].0)));
+ 
+         write(b"library");
+         remove_copy(&dir, "OpenAL.dll", b"library");
 diff --git a/pomme-client/src/audio/mod.rs b/pomme-client/src/audio/mod.rs
 index 2116cc5..6e84928 100644
 --- a/pomme-client/src/audio/mod.rs
@@ -477,10 +914,53 @@ index 2116cc5..6e84928 100644
      fn handle_command(&mut self, command: AudioCommand) -> bool {
          match command {
              AudioCommand::Play(play) => {
+diff --git a/pomme-client/src/audio/sounds.rs b/pomme-client/src/audio/sounds.rs
+index 71e87a5..a82e12c 100644
+--- a/pomme-client/src/audio/sounds.rs
++++ b/pomme-client/src/audio/sounds.rs
+@@ -804,10 +804,10 @@ mod tests {
+         let [base, pack] = [(); 2].map(|()| TempDir::new().unwrap());
+         for (dir, bytes) in [(&base, b"base"), (&pack, b"pack")] {
+             let sounds = dir.0.join("assets/minecraft/sounds");
+-            std::fs::create_dir_all(&sounds).unwrap();
+-            std::fs::write(sounds.join("present.ogg"), bytes).unwrap();
++            pomme_dirs::fs::create_dir_all(&sounds).unwrap();
++            pomme_dirs::fs::write(sounds.join("present.ogg"), bytes).unwrap();
+         }
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             base.0.join("assets/minecraft/sounds.json"),
+             r#"{"test": {"sounds": ["present", "absent"]}}"#,
+         )
 diff --git a/pomme-client/src/benchmark.rs b/pomme-client/src/benchmark.rs
-index efe2532..73b2bc7 100644
+index efe2532..f400b8b 100644
 --- a/pomme-client/src/benchmark.rs
 +++ b/pomme-client/src/benchmark.rs
+@@ -1,5 +1,5 @@
+ use std::path::Path;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use crate::renderer::RenderTimings;
+ use crate::ui::world_list::{Difficulty, GameMode, WorldList, WorldSummary, saves_dir};
+@@ -182,7 +182,7 @@ impl Benchmark {
+ 
+         let path = game_dir.join("benchmark.json");
+         if let Ok(json) = serde_json::to_string_pretty(&result) {
+-            let _ = std::fs::write(&path, json);
++            let _ = pomme_dirs::fs::write(&path, json);
+             tracing::info!("Benchmark saved to {}", path.display());
+         }
+ 
+@@ -446,7 +446,7 @@ impl ChunkLoadResult {
+         );
+         let path = game_dir.join("chunk_load.json");
+         if let Ok(json) = serde_json::to_string_pretty(self) {
+-            let _ = std::fs::write(&path, json);
++            let _ = pomme_dirs::fs::write(&path, json);
+             tracing::info!("Chunk load result saved to {}", path.display());
+         }
+     }
 @@ -798,7 +798,7 @@ async fn post_paste(json: String) -> Result<String, String> {
  
  /// Spawn a background upload of `json` and copy the resulting link to the
@@ -490,11 +970,138 @@ index efe2532..73b2bc7 100644
      let handle: UploadHandle = std::sync::Arc::new(std::sync::Mutex::new(UploadStatus::Uploading));
      let out = std::sync::Arc::clone(&handle);
      rt.spawn(async move {
+diff --git a/pomme-client/src/cpu_bench/distant.rs b/pomme-client/src/cpu_bench/distant.rs
+index 55a9922..2323274 100644
+--- a/pomme-client/src/cpu_bench/distant.rs
++++ b/pomme-client/src/cpu_bench/distant.rs
+@@ -81,7 +81,7 @@ fn backlog(c: &mut Criterion, assets: &Assets, states: &States) {
+     let sections = chunk.read().sections.clone();
+     let light = world.light_data.get(&(0, 0)).cloned();
+     let dir = std::env::temp_dir().join(format!("pomme-bench-distant-{}", std::process::id()));
+-    let _ = std::fs::remove_dir_all(&dir);
++    let _ = pomme_dirs::fs::remove_dir_all(&dir);
+     let ingest = |columns: &[ChunkPos]| {
+         let mut into = World::new(Some(dir.clone()));
+         for &pos in columns {
+@@ -103,5 +103,5 @@ fn backlog(c: &mut Criterion, assets: &Assets, states: &States) {
+     ordered.sort_by_key(|&pos| ingest_order(pos));
+     group.bench_function("z-order", |b| b.iter(|| ingest(black_box(&ordered))));
+     group.finish();
+-    let _ = std::fs::remove_dir_all(dir);
++    let _ = pomme_dirs::fs::remove_dir_all(dir);
+ }
+diff --git a/pomme-client/src/cpu_bench/fixtures.rs b/pomme-client/src/cpu_bench/fixtures.rs
+index a97e9c9..db5f9a2 100644
+--- a/pomme-client/src/cpu_bench/fixtures.rs
++++ b/pomme-client/src/cpu_bench/fixtures.rs
+@@ -31,7 +31,7 @@ impl Assets {
+         dirs: &DataDirs,
+         block_state_table: BlockStateTable,
+     ) -> Result<Self, String> {
+-        if !dirs.jar_assets_dir.is_dir() {
++        if !pomme_dirs::fs::is_dir(&dirs.jar_assets_dir) {
+             return Err(format!(
+                 "no {version} assets at {} (run the client on {version} once to download them)",
+                 dirs.jar_assets_dir.display()
+diff --git a/pomme-client/src/harness/exec.rs b/pomme-client/src/harness/exec.rs
+index 44ad99e..bc09a94 100644
+--- a/pomme-client/src/harness/exec.rs
++++ b/pomme-client/src/harness/exec.rs
+@@ -1,7 +1,8 @@
+ //! Runs one [`Command`] against the app, as its UI path would.
+ 
+ use std::path::{Path, PathBuf};
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use serde_json::{Value, json};
+ 
+@@ -203,10 +204,10 @@ fn run_anywhere(command: &Command, core: &mut AppCore, phase: &mut AppPhase) ->
+                 return Outcome::Done(Err("no window yet".into()));
+             };
+             if let Some(dir) = path.parent() {
+-                let _ = std::fs::create_dir_all(dir);
++                let _ = pomme_dirs::fs::create_dir_all(dir);
+             }
+             // A shot from an earlier run would read as this one written.
+-            let _ = std::fs::remove_file(path);
++            let _ = pomme_dirs::fs::remove_file(path);
+             gfx.renderer.request_screenshot_to(path.clone());
+             return Outcome::Screenshot(path.clone());
+         }
+@@ -228,7 +229,7 @@ pub fn screenshot_progress(
+     let saving = phase
+         .gfx_mut()
+         .is_none_or(|gfx| gfx.renderer.screenshot_saving());
+-    if !saving && path.exists() {
++    if !saving && pomme_dirs::fs::exists(&path) {
+         Some(Ok(()))
+     } else if asked.elapsed() > SCREENSHOT_TIMEOUT {
+         Some(Err("screenshot never written".into()))
+diff --git a/pomme-client/src/harness/mod.rs b/pomme-client/src/harness/mod.rs
+index 852e8b5..2a766c7 100644
+--- a/pomme-client/src/harness/mod.rs
++++ b/pomme-client/src/harness/mod.rs
+@@ -9,7 +9,7 @@ mod script;
+ mod socket;
+ 
+ use std::path::PathBuf;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use crossbeam_channel::Receiver;
+ use exec::Outcome;
+diff --git a/pomme-client/src/harness/script.rs b/pomme-client/src/harness/script.rs
+index cf19404..7e4a209 100644
+--- a/pomme-client/src/harness/script.rs
++++ b/pomme-client/src/harness/script.rs
+@@ -3,7 +3,8 @@
+ //! go to the output directory, and the process exits 0 on pass, 1 on fail.
+ 
+ use std::path::{Path, PathBuf};
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use serde::{Deserialize, Serialize};
+ 
+@@ -590,7 +591,7 @@ pub struct Script {
+ impl Script {
+     pub fn load(path: &Path, out_dir: Option<PathBuf>) -> Result<Self, String> {
+         let source =
+-            std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
++            pomme_dirs::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+         let (steps, deterministic) =
+             parse(&source).map_err(|e| format!("{}: {e}", path.display()))?;
+         let name = path
+@@ -796,9 +797,9 @@ impl Script {
+             passed,
+             steps: &self.reports,
+         };
+-        let written = std::fs::create_dir_all(&self.out_dir).and_then(|()| {
++        let written = pomme_dirs::fs::create_dir_all(&self.out_dir).and_then(|()| {
+             let json = serde_json::to_vec_pretty(&report).map_err(std::io::Error::other)?;
+-            std::fs::write(self.out_dir.join("report.json"), json)
++            pomme_dirs::fs::write(self.out_dir.join("report.json"), json)
+         });
+         if let Err(e) = written {
+             eprintln!("[{}] couldn't write the report: {e}", self.name);
 diff --git a/pomme-client/src/headless.rs b/pomme-client/src/headless.rs
-index 4acbd34..aa9adfa 100644
+index 4acbd34..fd0dd25 100644
 --- a/pomme-client/src/headless.rs
 +++ b/pomme-client/src/headless.rs
-@@ -79,6 +79,7 @@ pub(crate) fn vanilla_resources(
+@@ -6,7 +6,8 @@ use std::collections::HashMap;
+ use std::io;
+ use std::path::Path;
+ use std::rc::Rc;
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use pomme_protocol::serverbound::{GamePacket, ResourcePackAction};
+ 
+@@ -79,6 +80,7 @@ pub(crate) fn vanilla_resources(
  /// For a server with no `--username`, the stored sign-in, which an online
  /// server needs. Otherwise, or if it can't be restored, offline: the
  /// integrated server doesn't check accounts.
@@ -502,7 +1109,7 @@ index 4acbd34..aa9adfa 100644
  pub fn user(
      args: &LaunchArgs,
      play: &QuickPlay,
-@@ -99,6 +100,7 @@ pub fn user(
+@@ -99,6 +101,7 @@ pub fn user(
  }
  
  /// Runs the benchmark at `rd` in `play`'s world; returns the exit code.
@@ -510,8 +1117,30 @@ index 4acbd34..aa9adfa 100644
  pub fn run(
      rd: u32,
      play: QuickPlay,
+diff --git a/pomme-client/src/lang.rs b/pomme-client/src/lang.rs
+index 2644848..aacb71b 100644
+--- a/pomme-client/src/lang.rs
++++ b/pomme-client/src/lang.rs
+@@ -125,14 +125,14 @@ mod tests {
+ 
+     fn write(root: &std::path::Path, namespace: &str, body: &str) {
+         let lang = root.join(format!("assets/{namespace}/lang"));
+-        std::fs::create_dir_all(&lang).unwrap();
+-        std::fs::write(lang.join("en_us.json"), body).unwrap();
++        pomme_dirs::fs::create_dir_all(&lang).unwrap();
++        pomme_dirs::fs::write(lang.join("en_us.json"), body).unwrap();
+     }
+ 
+     #[test]
+     fn nothing_to_read_without_a_file() {
+         let dir = TempDir::new().unwrap();
+-        std::fs::create_dir_all(dir.0.join("assets/minecraft")).unwrap();
++        pomme_dirs::fs::create_dir_all(dir.0.join("assets/minecraft")).unwrap();
+         assert_eq!(read(&test_resources(std::slice::from_ref(&dir.0))), None);
+     }
+ 
 diff --git a/pomme-client/src/lib.rs b/pomme-client/src/lib.rs
-index 4fe8d97..e423992 100644
+index 4fe8d97..143cac9 100644
 --- a/pomme-client/src/lib.rs
 +++ b/pomme-client/src/lib.rs
 @@ -1,6 +1,7 @@
@@ -538,7 +1167,63 @@ index 4fe8d97..e423992 100644
  mod logging;
  mod mob_effect;
  mod net;
-@@ -89,6 +93,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -41,6 +45,10 @@ mod update;
+ mod user;
+ mod util;
+ mod version;
++#[cfg(target_arch = "wasm32")]
++mod web_fs;
++#[cfg(target_arch = "wasm32")]
++mod web_page;
+ mod world;
+ 
+ use std::path::PathBuf;
+@@ -68,7 +76,7 @@ fn use_bundled_moltenvk() {
+     let Some(icd) = std::env::current_exe()
+         .ok()
+         .and_then(|exe| Some(exe.parent()?.join("MoltenVK_icd.json")))
+-        .filter(|icd| icd.exists())
++        .filter(|icd| pomme_dirs::fs::exists(&icd))
+     else {
+         return;
+     };
+@@ -76,6 +84,35 @@ fn use_bundled_moltenvk() {
+     unsafe { std::env::set_var("VK_ICD_FILENAMES", icd) };
+ }
+ 
++/// The page's canvas, which the game window takes over.
++#[cfg(target_arch = "wasm32")]
++thread_local! {
++    pub(crate) static CANVAS: std::cell::RefCell<Option<web_sys::HtmlCanvasElement>> =
++        const { std::cell::RefCell::new(None) };
++}
++
++/// The browser build's start: opens the GPU on `canvas`, loads the stored
++/// game files, then runs the game in the page's event loop.
++#[cfg(target_arch = "wasm32")]
++#[wasm_bindgen::prelude::wasm_bindgen]
++pub async fn start(canvas: web_sys::HtmlCanvasElement) -> Result<(), wasm_bindgen::JsValue> {
++    install_panic_hook();
++    renderer::rhi::backend::init(&canvas)
++        .await
++        .map_err(|e| wasm_bindgen::JsValue::from_str(&e))?;
++    web_fs::init().await?;
++    CANVAS.set(Some(canvas));
++    let args = LaunchArgs::from_words("--username Player")
++        .map_err(|e| wasm_bindgen::JsValue::from_str(&e.to_string()))?;
++    run(
++        args,
++        Platform {
++            data_root: Some(PathBuf::from("/pomme")),
++        },
++    );
++    Ok(())
++}
++
+ /// What differs per platform at startup.
+ pub struct Platform {
+     /// Replaces the per-user data directory; Android passes its app storage.
+@@ -89,6 +126,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      // OS, so a chunk-load spike lingers; 10 ms (v2's default) returns it
      // promptly without purging on every free. The bindings don't name
      // `mi_option_purge_delay`; it is option 15 in both v2 and v3.
@@ -546,7 +1231,25 @@ index 4fe8d97..e423992 100644
      unsafe { libmimalloc_sys::mi_option_set(15, 10) };
      #[cfg(target_os = "macos")]
      use_bundled_moltenvk();
-@@ -175,14 +180,9 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -119,7 +157,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+ 
+     update::clean_up();
+     let check_for_update = update::enabled(&args);
+-    std::thread::spawn(pomme_item::defaults::prewarm);
++    drop(crate::tasks::spawn_job(pomme_item::defaults::prewarm));
+ 
+     // Bare launches take the newest joinable version, skipping any staged one.
+     let default_version = VERSIONS
+@@ -148,7 +186,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+     let data_dirs = args.data_dirs(version);
+ 
+     let log_dir = data_dirs.game_dir.join("logs");
+-    std::fs::create_dir_all(&log_dir).unwrap();
++    pomme_dirs::fs::create_dir_all(&log_dir).unwrap();
+     let _guard = logging::init(&log_dir);
+     #[cfg(target_os = "ios")]
+     for dir in [
+@@ -175,14 +213,9 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      // A single connection needs only a few async workers; the default runtime
      // spawns one per core and floods them decoding the chunk-load burst, starving
      // the render/mesh threads. Cap it so those cores stay free.
@@ -563,7 +1266,7 @@ index 4fe8d97..e423992 100644
          let _runtime = rt.enter();
          crate::net::chat_security::ProfileKeyServices::prefetch();
      }
-@@ -192,6 +192,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -192,6 +225,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
              app::QuickPlay::Singleplayer(benchmark::bench_world(&data_dirs.game_dir, version))
          })
      });
@@ -571,7 +1274,21 @@ index 4fe8d97..e423992 100644
      if args.headless
          && let Some(rd) = args.chunk_bench
      {
-@@ -213,7 +214,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+@@ -200,11 +234,12 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+         std::process::exit(headless::run(rd, play, user, version, &data_dirs, &rt));
+     }
+ 
++    // TODO: the browser plays offline until Microsoft sign-in works there.
+     let (user, require_account) = UserData::for_launch(
+         args.username,
+         args.uuid,
+         args.access_token,
+-        cfg!(not(debug_assertions)),
++        cfg!(all(not(debug_assertions), not(target_arch = "wasm32"))),
+         cfg!(mobile),
+     );
+ 
+@@ -213,7 +248,7 @@ pub fn run(args: LaunchArgs, platform: Platform) {
      #[cfg(feature = "test-harness")]
      let discord = args.harness_script.is_none();
      #[cfg(not(feature = "test-harness"))]
@@ -580,11 +1297,165 @@ index 4fe8d97..e423992 100644
      let presence = discord
          .then(|| {
              crate::discord::DiscordPresence::start(version)
+@@ -257,6 +292,15 @@ pub fn run(args: LaunchArgs, platform: Platform) {
+         });
+         app = app.with_harness(harness);
+     }
++    // The page's event loop runs the game from here; this returns at once.
++    #[cfg(target_arch = "wasm32")]
++    {
++        match winit::event_loop::EventLoop::new() {
++            Ok(event_loop) => app.spawn(event_loop),
++            Err(e) => tracing::error!("Fatal: {e}"),
++        }
++        return;
++    }
+     #[cfg(target_os = "android")]
+     let event_loop = {
+         use winit::platform::android::EventLoopBuilderExtAndroid;
+diff --git a/pomme-client/src/logging.rs b/pomme-client/src/logging.rs
+index 9cee3bd..e4c9185 100644
+--- a/pomme-client/src/logging.rs
++++ b/pomme-client/src/logging.rs
+@@ -64,7 +64,7 @@ fn log_panic(info: &std::panic::PanicHookInfo) {
+     let path = LOG_FILE.get();
+     if let Some(path) = path {
+         let line = format!("{} PANIC {info}\n", chrono::Utc::now().to_rfc3339());
+-        let _ = std::fs::OpenOptions::new()
++        let _ = pomme_dirs::fs::OpenOptions::new()
+             .append(true)
+             .create(true)
+             .open(path)
+@@ -98,7 +98,7 @@ const MAX_LOG_FILES: usize = 5;
+ 
+ fn rotate(log_dir: &Path) -> std::io::Result<()> {
+     let latest = log_dir.join(LATEST_LOG);
+-    if !latest.exists() {
++    if !pomme_dirs::fs::exists(&latest) {
+         return Ok(());
+     }
+     let modified = latest.metadata()?.modified()?;
+@@ -109,17 +109,17 @@ fn rotate(log_dir: &Path) -> std::io::Result<()> {
+         .map_err(std::io::Error::other)?;
+ 
+     let index = (1..)
+-        .find(|i| !log_dir.join(format!("{date}-{i}.log.gz")).exists())
++        .find(|i| !pomme_dirs::fs::exists(&log_dir.join(format!("{date}-{i}.log.gz"))))
+         .unwrap();
+     let dest = log_dir.join(format!("{date}-{index}.log.gz"));
+ 
+-    let input = std::fs::read(&latest)?;
+-    let output_file = std::fs::File::create(&dest)?;
++    let input = pomme_dirs::fs::read(&latest)?;
++    let output_file = pomme_dirs::fs::File::create(&dest)?;
+     let mut encoder = flate2::write::GzEncoder::new(output_file, flate2::Compression::default());
+ 
+     std::io::Write::write_all(&mut encoder, &input)?;
+     encoder.finish().map_err(std::io::Error::other)?;
+-    std::fs::remove_file(&latest)?;
++    pomme_dirs::fs::remove_file(&latest)?;
+ 
+     cleanup_old_logs(log_dir);
+ 
+@@ -127,7 +127,7 @@ fn rotate(log_dir: &Path) -> std::io::Result<()> {
+ }
+ 
+ fn cleanup_old_logs(log_dir: &Path) {
+-    let mut gz_files: Vec<_> = std::fs::read_dir(log_dir)
++    let mut gz_files: Vec<_> = pomme_dirs::fs::read_dir(log_dir)
+         .into_iter()
+         .flatten()
+         .flatten()
+@@ -141,11 +141,11 @@ fn cleanup_old_logs(log_dir: &Path) {
+     gz_files.sort_by_key(|e| {
+         e.metadata()
+             .and_then(|m| m.modified())
+-            .unwrap_or(std::time::SystemTime::UNIX_EPOCH)
++            .unwrap_or(web_time::SystemTime::UNIX_EPOCH)
+     });
+ 
+     for entry in &gz_files[..gz_files.len() - MAX_LOG_FILES] {
+-        let _ = std::fs::remove_file(entry.path());
++        let _ = pomme_dirs::fs::remove_file(entry.path());
+     }
+ }
+ 
+@@ -155,15 +155,15 @@ mod tests {
+ 
+     #[test]
+     fn panic_lands_in_the_log() {
+-        let nanos = std::time::SystemTime::now()
+-            .duration_since(std::time::UNIX_EPOCH)
++        let nanos = web_time::SystemTime::now()
++            .duration_since(web_time::UNIX_EPOCH)
+             .unwrap()
+             .as_nanos();
+         let dir = std::env::temp_dir().join(format!(
+             "pomme-panic-hook-test-{}-{nanos}",
+             std::process::id()
+         ));
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         let log = dir.join(LATEST_LOG);
+         LOG_FILE.set(log.clone()).unwrap();
+ 
+@@ -180,8 +180,8 @@ mod tests {
+             std::panic::set_hook(previous);
+         }
+ 
+-        let written = std::fs::read_to_string(&log).unwrap();
+-        let _ = std::fs::remove_dir_all(&dir);
++        let written = pomme_dirs::fs::read_to_string(&log).unwrap();
++        let _ = pomme_dirs::fs::remove_dir_all(&dir);
+         assert!(written.contains("PANIC") && written.contains("the message under test"));
+     }
+ }
+diff --git a/pomme-client/src/net/capture.rs b/pomme-client/src/net/capture.rs
+index 83deb37..3e01089 100644
+--- a/pomme-client/src/net/capture.rs
++++ b/pomme-client/src/net/capture.rs
+@@ -4,12 +4,12 @@
+ use pomme_protocol::Phase;
+ 
+ #[cfg(feature = "test-harness")]
+-static FILE: std::sync::OnceLock<std::sync::Mutex<std::fs::File>> = std::sync::OnceLock::new();
++static FILE: std::sync::OnceLock<std::sync::Mutex<pomme_dirs::fs::File>> = std::sync::OnceLock::new();
+ 
+ /// Starts recording into `path`, truncating it.
+ #[cfg(feature = "test-harness")]
+ pub fn start(path: &std::path::Path) -> std::io::Result<()> {
+-    let _ = FILE.set(std::sync::Mutex::new(std::fs::File::create(path)?));
++    let _ = FILE.set(std::sync::Mutex::new(pomme_dirs::fs::File::create(path)?));
+     Ok(())
+ }
+ 
 diff --git a/pomme-client/src/net/chat_security.rs b/pomme-client/src/net/chat_security.rs
-index ad48070..30b0f59 100644
+index ad48070..2910e62 100644
 --- a/pomme-client/src/net/chat_security.rs
 +++ b/pomme-client/src/net/chat_security.rs
-@@ -260,7 +260,7 @@ fn prepare_key_pair(
+@@ -28,15 +28,17 @@ const MAX_CHAT_LENGTH: usize = 256;
+ const MAX_ARGUMENT_NAME_LENGTH: usize = 16;
+ 
+ pub fn now_ms() -> u64 {
+-    std::time::SystemTime::now()
+-        .duration_since(std::time::UNIX_EPOCH)
++    web_time::SystemTime::now()
++        .duration_since(web_time::UNIX_EPOCH)
+         .unwrap_or_default()
+         .as_millis() as u64
+ }
+ 
+ fn http_client() -> Result<reqwest::Client, String> {
+-    super::http::builder()
+-        .timeout(Duration::from_secs(8))
++    let builder = super::http::builder();
++    #[cfg(not(target_arch = "wasm32"))]
++    let builder = builder.timeout(Duration::from_secs(8));
++    builder
+         .build()
+         .map_err(|e| format!("could not build HTTP client: {e}"))
+ }
+@@ -260,7 +262,7 @@ fn prepare_key_pair(
          manager.next_refresh_ms = now_ms() + MINIMUM_KEY_REFRESH_INTERVAL_MS;
          manager.in_flight += 1;
      }
@@ -593,6 +1464,28 @@ index ad48070..30b0f59 100644
          let _chain = KEY_PAIR_FETCH.lock().await;
          let cached = key_pairs(account).key_pair.clone();
          let key_pair = match cached {
+@@ -588,7 +590,7 @@ impl ProfileKeyServices {
+             }
+             *state = ServicesState::Loading;
+         }
+-        tokio::spawn(async {
++        crate::tasks::spawn_detached(async {
+             let services = match Self::fetch().await {
+                 Ok(services) => Some(Arc::new(services)),
+                 Err(error) => {
+diff --git a/pomme-client/src/net/chunk_batch.rs b/pomme-client/src/net/chunk_batch.rs
+index 032ec64..5d17ff8 100644
+--- a/pomme-client/src/net/chunk_batch.rs
++++ b/pomme-client/src/net/chunk_batch.rs
+@@ -5,7 +5,7 @@
+ //! Vanilla answers from how long the batch took per chunk, starting
+ //! deliberately low and ramping, which is what paces the world in on join.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ const MAX_OLD_SAMPLES_WEIGHT: u32 = 49;
+ /// Vanilla `CLAMP_COEFFICIENT`: one batch can move the average by at most 3x
 diff --git a/pomme-client/src/net/conn.rs b/pomme-client/src/net/conn.rs
 index 443cecc..c927ac9 100644
 --- a/pomme-client/src/net/conn.rs
@@ -711,6 +1604,71 @@ index b84c0a4..c6303e5 100644
  /// Resolves a variant registry holder id to the mob's renderer pool slot.
  /// Matches vanilla, which reads the entry's synced NBT and never the registry
  /// id: a known `asset_id` picks the exact slot, else the `model` field picks
+diff --git a/pomme-client/src/net/http.rs b/pomme-client/src/net/http.rs
+index cde11d7..5327091 100644
+--- a/pomme-client/src/net/http.rs
++++ b/pomme-client/src/net/http.rs
+@@ -22,6 +22,7 @@ pub fn builder() -> reqwest::ClientBuilder {
+     builder
+ }
+ 
++#[cfg(not(target_arch = "wasm32"))]
+ pub fn blocking_builder() -> reqwest::blocking::ClientBuilder {
+     let builder = reqwest::blocking::Client::builder();
+     #[cfg(target_os = "android")]
+@@ -35,9 +36,12 @@ pub fn blocking_builder() -> reqwest::blocking::ClientBuilder {
+ pub fn client() -> &'static reqwest::Client {
+     static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+     CLIENT.get_or_init(|| {
+-        builder()
++        let builder = builder();
++        #[cfg(not(target_arch = "wasm32"))]
++        let builder = builder
+             .connect_timeout(Duration::from_secs(15))
+-            .read_timeout(Duration::from_secs(30))
++            .read_timeout(Duration::from_secs(30));
++        builder
+             .build()
+             .expect("the HTTP client builds")
+     })
+@@ -57,7 +61,7 @@ fn system_roots() -> &'static [reqwest::Certificate] {
+ /// Every PEM certificate in the first of `dirs` that exists.
+ #[cfg(any(test, target_os = "android"))]
+ fn read_roots(dirs: &[&Path]) -> Vec<reqwest::Certificate> {
+-    let Some(entries) = dirs.iter().find_map(|dir| std::fs::read_dir(dir).ok()) else {
++    let Some(entries) = dirs.iter().find_map(|dir| pomme_dirs::fs::read_dir(dir).ok()) else {
+         tracing::warn!("No CA certificate directory found");
+         return Vec::new();
+     };
+@@ -65,7 +69,7 @@ fn read_roots(dirs: &[&Path]) -> Vec<reqwest::Certificate> {
+     for entry in entries.flatten() {
+         // `from_pem` defers parsing to the client build, where one bad file
+         // would fail it; the bundle reader parses now.
+-        match std::fs::read(entry.path())
++        match pomme_dirs::fs::read(entry.path())
+             .ok()
+             .and_then(|pem| reqwest::Certificate::from_pem_bundle(&pem).ok())
+         {
+@@ -89,15 +93,15 @@ mod tests {
+     #[test]
+     fn reads_the_first_existing_dir_and_skips_junk() {
+         let dir = test_temp_dir("http_roots");
+-        std::fs::create_dir_all(&dir).unwrap();
+-        std::fs::write(dir.join("root.0"), include_str!("isrg_root_x1.pem")).unwrap();
+-        std::fs::write(dir.join("junk.0"), "not a certificate").unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::write(dir.join("root.0"), include_str!("isrg_root_x1.pem")).unwrap();
++        pomme_dirs::fs::write(dir.join("junk.0"), "not a certificate").unwrap();
+ 
+         let missing = dir.join("missing");
+         assert_eq!(read_roots(&[&missing, &dir]).len(), 1);
+         assert!(read_roots(&[&missing]).is_empty());
+         assert!(read_roots(&[] as &[&Path]).is_empty());
+ 
+-        std::fs::remove_dir_all(&dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ }
 diff --git a/pomme-client/src/net/mod.rs b/pomme-client/src/net/mod.rs
 index 8ba1fc2..9ddda8d 100644
 --- a/pomme-client/src/net/mod.rs
@@ -910,11 +1868,425 @@ index 65a3d4e..88047df 100644
              Self::Memory(s) => Pin::new(s).poll_shutdown(cx),
          }
      }
+diff --git a/pomme-client/src/net/wire_corpus.rs b/pomme-client/src/net/wire_corpus.rs
+index af87ae4..dc9e2d4 100644
+--- a/pomme-client/src/net/wire_corpus.rs
++++ b/pomme-client/src/net/wire_corpus.rs
+@@ -103,7 +103,7 @@ fn replay(version: &ProtocolVersion) -> Vec<(String, String)> {
+         env!("CARGO_MANIFEST_DIR"),
+         version.name
+     );
+-    let Ok(deflated) = std::fs::read(&path) else {
++    let Ok(deflated) = pomme_dirs::fs::read(&path) else {
+         let fix = format!("no fixture; run `just wire-fixtures {}`", version.name);
+         return vec![("-".into(), fix)];
+     };
+diff --git a/pomme-client/src/renderer/chunk/atlas.rs b/pomme-client/src/renderer/chunk/atlas.rs
+index 01c667e..9532f23 100644
+--- a/pomme-client/src/renderer/chunk/atlas.rs
++++ b/pomme-client/src/renderer/chunk/atlas.rs
+@@ -2138,9 +2138,9 @@ mod tests {
+         let instance = root.join("instance");
+         let base_dir = jar_assets.join("minecraft/textures/item");
+         let pack_dir = instance.join("resourcepacks/test_pack/assets/minecraft/textures/item");
+-        std::fs::create_dir_all(&base_dir).unwrap();
+-        std::fs::create_dir_all(&pack_dir).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::create_dir_all(&base_dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&pack_dir).unwrap();
++        pomme_dirs::fs::write(
+             instance.join("resourcepacks/test_pack/pack.mcmeta"),
+             r#"{"pack":{"pack_format":84,"description":"test"}}"#,
+         )
+@@ -2150,7 +2150,7 @@ mod tests {
+         base.put_pixel(0, 0, image::Rgba([255, 255, 255, 255]));
+         let base_path = base_dir.join("cocoa_beans.png");
+         base.save(&base_path).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             base_path.with_extension("png.mcmeta"),
+             r#"{"animation":{"width":2,"height":2}}"#,
+         )
+@@ -2175,7 +2175,7 @@ mod tests {
+         assert!(mask.is_opaque_in_any_frame(1, 3));
+         assert_eq!(source.data[alpha_index(1, 3, 2)], 255);
+ 
+-        std::fs::remove_dir_all(root).unwrap();
++        pomme_dirs::fs::remove_dir_all(root).unwrap();
+     }
+ 
+     #[test]
+diff --git a/pomme-client/src/renderer/chunk/buffer.rs b/pomme-client/src/renderer/chunk/buffer.rs
+index 0745999..e6c8d0b 100644
+--- a/pomme-client/src/renderer/chunk/buffer.rs
++++ b/pomme-client/src/renderer/chunk/buffer.rs
+@@ -1,7 +1,8 @@
+ use std::collections::{HashMap, HashSet, VecDeque};
+ use std::mem::offset_of;
+ use std::sync::Arc;
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use glam::DVec3;
+ 
+@@ -1437,7 +1438,7 @@ pub struct ChunkBufferStore {
+     /// [`Self::set_eye`]).
+     eye: Option<DVec3>,
+     /// What `uploaded_ms` counts from.
+-    epoch: std::time::Instant,
++    epoch: web_time::Instant,
+     /// The `uploaded_ms` of sections meshed without geometry, by column:
+     /// vanilla stamps every compiled section, and fades its block entities
+     /// in from then.
+@@ -1570,7 +1571,7 @@ impl ChunkBufferStore {
+                 })
+                 .collect(),
+             eye: None,
+-            epoch: std::time::Instant::now(),
++            epoch: web_time::Instant::now(),
+             compute_pipeline,
+             compute_layout,
+             cull_layout,
+diff --git a/pomme-client/src/renderer/chunk/mesher.rs b/pomme-client/src/renderer/chunk/mesher.rs
+index c49e24b..664a284 100644
+--- a/pomme-client/src/renderer/chunk/mesher.rs
++++ b/pomme-client/src/renderer/chunk/mesher.rs
+@@ -380,9 +380,9 @@ pub struct ChunkMeshData {
+ }
+ 
+ pub struct RemeshTiming {
+-    pub enqueued_at: std::time::Instant,
+-    pub started_at: std::time::Instant,
+-    pub meshed_at: std::time::Instant,
++    pub enqueued_at: web_time::Instant,
++    pub started_at: web_time::Instant,
++    pub meshed_at: web_time::Instant,
+ }
+ 
+ #[derive(Clone, Copy, Debug, Default)]
+@@ -1057,7 +1057,7 @@ impl MeshDispatcher {
+             upload_epoch: self.next_epoch.fetch_add(1, Ordering::Relaxed),
+             sections: request.sections,
+             is_recompile: request.recompile,
+-            enqueued_at: std::time::Instant::now(),
++            enqueued_at: web_time::Instant::now(),
+             snapshot: Mutex::new(Some(self.build_snapshot(chunk_store, request.pos))),
+             render_view: self.render_view.clone(),
+             uv_map: Arc::clone(&self.uv_map),
+@@ -1094,7 +1094,7 @@ impl MeshDispatcher {
+         sections: std::ops::Range<i32>,
+         content_gen: u64,
+     ) -> ChunkMeshData {
+-        let started_at = std::time::Instant::now();
++        let started_at = web_time::Instant::now();
+         let mut snapshot = self.build_snapshot(chunk_store, pos);
+         let mut mesh = mesh_chunk_snapshot(
+             &mut snapshot,
+@@ -1241,7 +1241,7 @@ struct PendingJob {
+     upload_epoch: u64,
+     sections: std::ops::Range<i32>,
+     is_recompile: bool,
+-    enqueued_at: std::time::Instant,
++    enqueued_at: web_time::Instant,
+     snapshot: Mutex<Option<ChunkStoreSnapshot>>,
+     render_view: OwnedBlockRenderView,
+     uv_map: Arc<AtlasUVMap>,
+@@ -1259,7 +1259,7 @@ impl PendingJob {
+     }
+ 
+     fn run(&self, mut snapshot: ChunkStoreSnapshot) {
+-        let started_at = std::time::Instant::now();
++        let started_at = web_time::Instant::now();
+         let mut mesh = mesh_chunk_snapshot(
+             &mut snapshot,
+             self.pos,
+@@ -1269,7 +1269,7 @@ impl PendingJob {
+             self.sections.clone(),
+             &self.pool,
+         );
+-        let meshed_at = std::time::Instant::now();
++        let meshed_at = web_time::Instant::now();
+         mesh.incarnation = self.incarnation;
+         mesh.content_gen = self.content_gen;
+         mesh.upload_epoch = self.upload_epoch;
+diff --git a/pomme-client/src/renderer/distant/worker.rs b/pomme-client/src/renderer/distant/worker.rs
+index 3824a76..1072620 100644
+--- a/pomme-client/src/renderer/distant/worker.rs
++++ b/pomme-client/src/renderer/distant/worker.rs
+@@ -6,7 +6,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
+ use std::path::{Path, PathBuf};
+ use std::sync::Arc;
+ use std::thread::JoinHandle;
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use crossbeam_channel::{Receiver, Sender};
+ use parking_lot::{Mutex, RwLock};
+@@ -852,15 +853,15 @@ mod tests {
+         assert!(store.ingest(&states, &overworld, lit(0, 0)).is_some());
+ 
+         assert!(store.set_cache(Some(new.clone()), 1), "another folder's");
+-        assert!(file(&old, 0).exists(), "written to the old folder");
++        assert!(pomme_dirs::fs::exists(&file(&old, 0)), "written to the old folder");
+         assert!(store.worlds.is_empty());
+         assert!(store.ingest(&states, &overworld, lit(4, 0)).is_none());
+         assert!(store.ingest(&states, &overworld, lit(8, 1)).is_some());
+         store.save();
+-        assert!(!file(&new, 4).exists() && !file(&old, 4).exists());
+-        assert!(file(&new, 8).exists());
++        assert!(!pomme_dirs::fs::exists(&file(&new, 4)) && !pomme_dirs::fs::exists(&file(&old, 4)));
++        assert!(pomme_dirs::fs::exists(&file(&new, 8)));
+         for dir in [old, new] {
+-            std::fs::remove_dir_all(dir).unwrap();
++            pomme_dirs::fs::remove_dir_all(dir).unwrap();
+         }
+     }
+ 
+@@ -877,14 +878,14 @@ mod tests {
+         captures.lock().push("overworld".into(), lit(10, 1));
+         store.take_all(&states, &captures);
+         for x in [6, 0, 2] {
+-            assert!(file(&dir, x).exists());
++            assert!(pomme_dirs::fs::exists(&file(&dir, x)));
+         }
+-        assert!(!file(&dir, 10).exists());
++        assert!(!pomme_dirs::fs::exists(&file(&dir, 10)));
+         let left: Vec<i32> = std::iter::from_fn(|| next(&captures))
+             .map(|(_, capture)| capture.pos.x)
+             .collect();
+         assert_eq!(left, [10]);
+-        std::fs::remove_dir_all(dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(dir).unwrap();
+     }
+ 
+     #[test]
+diff --git a/pomme-client/src/renderer/distant/world.rs b/pomme-client/src/renderer/distant/world.rs
+index fda0156..5b32a12 100644
+--- a/pomme-client/src/renderer/distant/world.rs
++++ b/pomme-client/src/renderer/distant/world.rs
+@@ -99,7 +99,7 @@ impl World {
+         let Some(path) = self.path(key) else {
+             return false;
+         };
+-        let read = std::fs::read(&path).ok();
++        let read = pomme_dirs::fs::read(&path).ok();
+         match read.as_deref().and_then(|file| section::decode(key, file)) {
+             Some(section) => {
+                 self.insert(key, section);
+@@ -231,10 +231,10 @@ impl World {
+             return;
+         };
+         if section.is_unseen() {
+-            let _ = std::fs::remove_file(&path);
++            let _ = pomme_dirs::fs::remove_file(&path);
+             return;
+         }
+-        let written = std::fs::create_dir_all(path.parent().expect("a section file has a folder"))
++        let written = pomme_dirs::fs::create_dir_all(path.parent().expect("a section file has a folder"))
+             .and_then(|()| crate::util::write_atomic(&path, &section::encode(key, section)));
+         if let Err(error) = written {
+             tracing::warn!("Failed to save distant terrain {}: {error}", path.display());
+@@ -313,7 +313,7 @@ pub(crate) mod tests {
+     /// A fresh folder under the temp dir for test `name`.
+     pub(crate) fn temp_dir(name: &str) -> PathBuf {
+         let dir = std::env::temp_dir().join(format!("pomme-distant-{name}-{}", std::process::id()));
+-        let _ = std::fs::remove_dir_all(&dir);
++        let _ = pomme_dirs::fs::remove_dir_all(&dir);
+         dir
+     }
+ 
+@@ -391,13 +391,13 @@ pub(crate) mod tests {
+         let level0 = SectionKey::of_vanilla(0, 103, 0, 0);
+         world.insert_update(&stone(103, 0, 0, 9));
+         world.flush();
+-        assert!(world.path(level0).unwrap().exists());
++        assert!(pomme_dirs::fs::exists(&world.path(level0).unwrap()));
+         let mut cleared = stone(103, 0, 0, voxel::AIR);
+         cleared.fill_for_test(voxel::compose(0x0F, voxel::AIR, 0), 0);
+         world.insert_update(&cleared);
+         world.flush();
+-        assert!(!world.path(level0).unwrap().exists());
+-        std::fs::remove_dir_all(dir).unwrap();
++        assert!(!pomme_dirs::fs::exists(&world.path(level0).unwrap()));
++        pomme_dirs::fs::remove_dir_all(dir).unwrap();
+     }
+ 
+     #[test]
+@@ -421,7 +421,7 @@ pub(crate) mod tests {
+         // The first, dropped, was written on the way out.
+         let first = SectionKey::of_vanilla(0, 0, 0, 0);
+         assert!(world.get(first).is_none());
+-        assert!(world.path(first).unwrap().exists());
++        assert!(pomme_dirs::fs::exists(&world.path(first).unwrap()));
+         assert!(world.load(first));
+ 
+         let missing = |x| SectionKey {
+@@ -433,7 +433,7 @@ pub(crate) mod tests {
+         world.absent.extend((0..ABSENT_SIZE as i32).map(missing));
+         assert!(!world.load(missing(-1)));
+         assert_eq!(world.absent.len(), 1, "forgotten, then the new one kept");
+-        std::fs::remove_dir_all(dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(dir).unwrap();
+     }
+ 
+     #[test]
+@@ -489,7 +489,7 @@ pub(crate) mod tests {
+         for level in 0..LEVELS {
+             assert!(reread.load(SectionKey::of_vanilla(level, 5, 0, 0)));
+         }
+-        std::fs::remove_dir_all(dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(dir).unwrap();
+     }
+ 
+     /// A column of four sections, the lowest stone, lit `light` if any.
 diff --git a/pomme-client/src/renderer/mod.rs b/pomme-client/src/renderer/mod.rs
-index 80aa716..c46328c 100644
+index 80aa716..ec54d81 100644
 --- a/pomme-client/src/renderer/mod.rs
 +++ b/pomme-client/src/renderer/mod.rs
-@@ -1992,7 +1992,7 @@ impl Renderer {
+@@ -112,48 +112,57 @@ pub enum RendererError {
+     Atlas(String),
+ }
+ 
+-/// The loading splash: logo, progress bar and status line.
+-pub(crate) fn splash_elements(sw: f32, sh: f32, progress: f32, status: &str) -> Vec<MenuElement> {
+-    let gs = (sh / 400.0).max(1.0);
+-    let logo_size = 48.0 * gs;
+-    let status_size = 8.0 * gs;
+-    let bar_w = 200.0 * gs;
+-    let bar_h = 6.0 * gs;
+-    let bar_border = 1.0 * gs;
+-    let cx = sw / 2.0;
+-    let cy = sh / 2.0;
++/// Vanilla `LoadingOverlay`'s red, which the splash clears to.
++pub(crate) const SPLASH_RED: [f32; 4] = [239.0 / 255.0, 50.0 / 255.0, 61.0 / 255.0, 1.0];
+ 
++/// The loading splash, laid out as vanilla's `LoadingOverlay`: the Mojang
++/// Studios logo centered, as wide as the lesser of 75% of the width and the
++/// height; the progress bar as wide, at 83.25% of the height; and under it,
++/// what Pomme is loading.
++pub(crate) fn splash_elements(sw: f32, sh: f32, progress: f32, status: &str) -> Vec<MenuElement> {
++    // Vanilla's automatic GUI scale: the largest that keeps 320x240 on screen.
++    let gs = (sw / 320.0).min(sh / 240.0).floor().max(1.0);
++    let logo_w = (sw * 0.75).min(sh);
++    let logo_h = logo_w / 4.0;
++    let (cx, cy) = (sw / 2.0, sh / 2.0);
++    let bar_y = sh * 0.8325;
++    let (x0, x1) = (cx - logo_w / 2.0, cx + logo_w / 2.0);
++    let (y0, y1) = (bar_y - 5.0 * gs, bar_y + 5.0 * gs);
++    let white = [1.0; 4];
++    let rect = |x: f32, y: f32, w: f32, h: f32| MenuElement::Rect {
++        x,
++        y,
++        w,
++        h,
++        corner_radius: 0.0,
++        color: white,
++    };
++    let half = |x: f32, v0: f32| MenuElement::SubImage {
++        x,
++        y: cy - logo_h / 2.0,
++        w: logo_w / 2.0,
++        h: logo_h,
++        sprite: SpriteId::MojangStudios,
++        src_rect: [0.0, v0, 1.0, v0 + 0.5],
++        tint: white,
++    };
++    let inner = (x1 - x0 - 4.0 * gs).max(0.0);
+     vec![
+-        MenuElement::Image {
+-            x: cx - logo_size / 2.0,
+-            y: cy - logo_size - 16.0 * gs,
+-            w: logo_size,
+-            h: logo_size,
+-            sprite: SpriteId::PommeLogo,
+-            tint: [1.0; 4],
+-        },
+-        MenuElement::Rect {
+-            x: cx - bar_w / 2.0 - bar_border,
+-            y: cy - bar_border,
+-            w: bar_w + bar_border * 2.0,
+-            h: bar_h + bar_border * 2.0,
+-            corner_radius: (bar_h / 2.0 + bar_border),
+-            color: [0.3, 0.3, 0.3, 0.8],
+-        },
+-        MenuElement::Rect {
+-            x: cx - bar_w / 2.0,
+-            y: cy,
+-            w: bar_w * progress,
+-            h: bar_h,
+-            corner_radius: bar_h / 2.0,
+-            color: [0.39, 0.71, 1.0, 1.0],
+-        },
++        half(x0, 0.0),
++        half(cx, 0.5),
++        // `LoadingOverlay.drawProgressBar`: a one-unit outline, the fill one
++        // unit inside it.
++        rect(x0, y0, x1 - x0, gs),
++        rect(x0, y1 - gs, x1 - x0, gs),
++        rect(x0, y0, gs, y1 - y0),
++        rect(x1 - gs, y0, gs, y1 - y0),
++        rect(x0 + 2.0 * gs, y0 + 2.0 * gs, inner * progress.clamp(0.0, 1.0), y1 - y0 - 4.0 * gs),
+         MenuElement::Text {
+             x: cx,
+-            y: cy + bar_h + 8.0 * gs,
+-            text: status.into(),
+-            scale: status_size,
+-            color: [0.6, 0.6, 0.6, 0.8],
++            y: y1 + 6.0 * gs,
++            text: format!("Pomme: {status}"),
++            scale: 8.0 * gs,
++            color: white,
+             centered: true,
+         },
+     ]
+@@ -365,7 +374,7 @@ const LOADING_SHARE: f32 = 0.5;
+ /// window hang.
+ pub struct RendererBoot {
+     screen: boot::BootScreen,
+-    loaded: std::thread::JoinHandle<(BlockRenderAssets, chunk::atlas::AtlasCpu)>,
++    loaded: crate::tasks::Job<(BlockRenderAssets, chunk::atlas::AtlasCpu)>,
+     model_inputs: Arc<crate::world::block::model::ModelInputs>,
+     progress: Arc<LoadProgress>,
+     /// The bar as drawn, eased towards `progress` each frame.
+@@ -420,7 +429,7 @@ impl Renderer {
+             let model_inputs = Arc::clone(&model_inputs);
+             let cache_dir = cache_dir.to_path_buf();
+             let progress = Arc::clone(&progress);
+-            std::thread::spawn(move || {
++            crate::tasks::spawn_job(move || {
+                 let render_assets = BlockRenderAssets::load(
+                     &model_inputs,
+                     Some(&cache_dir),
+@@ -690,6 +699,8 @@ impl Renderer {
+         status: &str,
+     ) -> Result<(), RendererError> {
+         let elements = splash_elements(sw, sh, progress, status);
++        #[cfg(target_arch = "wasm32")]
++        crate::web_page::splash(progress, status);
+ 
+         frames.wait(&ctx.device)?;
+         let Ok(rhi::Acquired::Image {
+@@ -702,7 +713,7 @@ impl Renderer {
+ 
+         let mut pass = encoder.begin_render_pass(
+             &ctx.device,
+-            &swapchain.pass(image_index, rhi::LoadOp::Clear([0.0, 0.0, 0.0, 1.0])),
++            &swapchain.pass(image_index, rhi::LoadOp::Clear(SPLASH_RED)),
+         );
+         let empty_uvs: HashMap<String, [f32; 4]> = HashMap::new();
+         let frame = frames.index();
+@@ -770,7 +781,7 @@ impl Renderer {
+         if self.suspended || self.swapchain_dirty || !self.swapchain.is_fifo() {
+             return;
+         }
+-        let t_pace = std::time::Instant::now();
++        let t_pace = web_time::Instant::now();
+         self.swapchain_dirty |= !self
+             .frames
+             .pace(&self.ctx, &self.swapchain, PACE_TIMEOUT_NS);
+@@ -1992,7 +2003,7 @@ impl Renderer {
          &mut self,
          user: &crate::user::UserData,
          resources: &dyn ResourceManager,
@@ -923,25 +2295,285 @@ index 80aa716..c46328c 100644
      ) {
          self.default_skin = crate::player::default_skin::index(&user.uuid);
          self.pending_skin = None;
+@@ -2244,7 +2255,7 @@ impl Renderer {
+ 
+         let frame = self.frames.index();
+ 
+-        let t_fence = std::time::Instant::now();
++        let t_fence = web_time::Instant::now();
+         self.frames.wait(&self.ctx.device)?;
+         let fence_ms = t_fence.elapsed().as_secs_f32() * 1000.0;
+         self.last_timings.gpu = self
+@@ -2261,7 +2272,7 @@ impl Renderer {
+         }
+         self.screenshot.collect_ready(frame, &self.ctx.device);
+ 
+-        let t_acquire = std::time::Instant::now();
++        let t_acquire = web_time::Instant::now();
+         let (image_index, suboptimal) =
+             match self.frames.acquire(&self.ctx.device, &self.swapchain)? {
+                 rhi::Acquired::Image { index, suboptimal } => (index, suboptimal),
+@@ -2517,7 +2528,7 @@ impl Renderer {
+             self.gui_item_atlas.end_bake_pass(&encoder, bake);
+         }
+ 
+-        let frame_start = std::time::Instant::now();
++        let frame_start = web_time::Instant::now();
+         if let RenderMode::World {
+             particles,
+             nameplates,
+@@ -2613,7 +2624,7 @@ impl Renderer {
+                         );
+                     }
+                     self.gpu_stamp(&encoder, frame, "sky");
+-                    let t_cull = std::time::Instant::now();
++                    let t_cull = web_time::Instant::now();
+                     // A pack that failed to build leaves its vertex format until
+                     // the next frame remeshes; skip those.
+                     let vanilla_terrain = self.chunk_buffers.format() == TerrainFormat::Vanilla;
+@@ -3035,7 +3046,7 @@ impl Renderer {
+ 
+         self.gui_item_atlas.end_frame();
+ 
+-        let t_present = std::time::Instant::now();
++        let t_present = web_time::Instant::now();
+         let presented =
+             self.frames
+                 .submit_and_present(encoder, &self.ctx, &self.swapchain, image_index)?;
+diff --git a/pomme-client/src/renderer/pipelines/clouds.rs b/pomme-client/src/renderer/pipelines/clouds.rs
+index c2d245f..829d339 100644
+--- a/pomme-client/src/renderer/pipelines/clouds.rs
++++ b/pomme-client/src/renderer/pipelines/clouds.rs
+@@ -55,6 +55,9 @@ struct CloudFace {
+     cell: [i16; 2],
+     dir: u8,
+     flags: u8,
++    /// Rounds the stride up to a multiple of four bytes, as WebGPU's vertex
++    /// buffers need.
++    _pad: [u8; 2],
+ }
+ 
+ /// Push constants shared by both stages: cloud tint (rgba) and the camera-
+@@ -350,6 +353,7 @@ fn emit_face(faces: &mut Vec<CloudFace>, rcx: i32, rcz: i32, dir: u8, flags: u8)
+         cell: [rcx as i16, rcz as i16],
+         dir,
+         flags,
++        _pad: [0; 2],
+     });
+ }
+ 
+diff --git a/pomme-client/src/renderer/pipelines/item_display.rs b/pomme-client/src/renderer/pipelines/item_display.rs
+index 4616132..46b4a5e 100644
+--- a/pomme-client/src/renderer/pipelines/item_display.rs
++++ b/pomme-client/src/renderer/pipelines/item_display.rs
+@@ -125,9 +125,9 @@ mod tests {
+     fn a_missing_left_hand_falls_back_to_the_same_models_right_hand() {
+         let dir = crate::test_util::test_temp_dir("display_fallback");
+         let mc = dir.join("assets/minecraft");
+-        std::fs::create_dir_all(mc.join("items")).unwrap();
+-        std::fs::create_dir_all(mc.join("models/item")).unwrap();
+-        let write = |path: &str, json: &str| std::fs::write(mc.join(path), json).unwrap();
++        pomme_dirs::fs::create_dir_all(mc.join("items")).unwrap();
++        pomme_dirs::fs::create_dir_all(mc.join("models/item")).unwrap();
++        let write = |path: &str, json: &str| pomme_dirs::fs::write(mc.join(path), json).unwrap();
+         write(
+             "items/thing.json",
+             r#"{"model": {"type": "minecraft:model", "model": "minecraft:item/thing"}}"#,
+@@ -149,6 +149,6 @@ mod tests {
+             DisplayTransform::IDENTITY,
+         );
+         assert_eq!(resolved.rotation, glam::Vec3::new(0.0, 10.0, 0.0));
+-        std::fs::remove_dir_all(dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(dir).unwrap();
+     }
+ }
+diff --git a/pomme-client/src/renderer/pipelines/menu_overlay.rs b/pomme-client/src/renderer/pipelines/menu_overlay.rs
+index ab3ec6b..a9c2b3f 100644
+--- a/pomme-client/src/renderer/pipelines/menu_overlay.rs
++++ b/pomme-client/src/renderer/pipelines/menu_overlay.rs
+@@ -1,6 +1,6 @@
+ use std::collections::HashMap;
+ use std::io::{self, Read};
+-use std::time::{SystemTime, UNIX_EPOCH};
++use web_time::{SystemTime, UNIX_EPOCH};
+ 
+ use crate::assets::load_resource_image;
+ use crate::player::default_skin;
+@@ -2675,6 +2675,9 @@ pub enum SpriteId {
+     /// `DefaultPlayerSkin`'s faces, by its index.
+     DefaultHead(u8),
+     PommeLogo,
++    /// Vanilla's loading screen logo: the wordmark's left half above its
++    /// right half.
++    MojangStudios,
+     MinecraftLogo,
+     MinecraftEdition,
+     BedrockTitle,
+@@ -4396,6 +4399,19 @@ fn build_sprite_atlas(
+         }
+     }
+ 
++    // Blank until a first run has downloaded the version's textures.
++    match load_resource_image(
++        resources,
++        &resource_id!("minecraft:textures/gui/title/mojangstudios.png"),
++    ) {
++        Ok(img) => {
++            let rgba = img.to_rgba8();
++            let (w, h) = (rgba.width(), rgba.height());
++            images.push((SpriteId::MojangStudios, rgba.into_raw(), w, h, 0.0));
++        }
++        Err(_) => images.push((SpriteId::MojangStudios, vec![0; 4], 1, 1, 0.0)),
++    }
++
+     if let Some(logo) = pomme_logo {
+         images.push((
+             SpriteId::PommeLogo,
+@@ -5747,12 +5763,12 @@ mod tests {
+     #[test]
+     fn bedrock_nine_slice_reads_the_number_form_only() {
+         let dir = std::env::temp_dir().join(format!("pomme-nine-slice-{}", std::process::id()));
+-        std::fs::create_dir_all(dir.join("assets/bedrock")).unwrap();
++        pomme_dirs::fs::create_dir_all(dir.join("assets/bedrock")).unwrap();
+         for (stem, json) in [
+             ("number", r#"{ "nineslice_size": 2, "base_size": [4, 4] }"#),
+             ("array", r#"{ "nineslice_size": [1, 2, 1, 2] }"#),
+         ] {
+-            std::fs::write(
++            pomme_dirs::fs::write(
+                 dir.join("assets/bedrock").join(format!("{stem}.json")),
+                 json,
+             )
+@@ -5762,7 +5778,7 @@ mod tests {
+         assert_eq!(bedrock_nine_slice(&resources, "number"), 2.0);
+         assert_eq!(bedrock_nine_slice(&resources, "array"), 0.0);
+         assert_eq!(bedrock_nine_slice(&resources, "missing"), 0.0);
+-        std::fs::remove_dir_all(dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(dir).unwrap();
+     }
+ 
+     #[test]
+diff --git a/pomme-client/src/renderer/pipelines/shaderpack.rs b/pomme-client/src/renderer/pipelines/shaderpack.rs
+index 2bec87a..b71affd 100644
+--- a/pomme-client/src/renderer/pipelines/shaderpack.rs
++++ b/pomme-client/src/renderer/pipelines/shaderpack.rs
+@@ -365,8 +365,8 @@ pub struct PackRenderer {
+     shadow_view_projection: Mat4,
+     previous: Option<Previous>,
+     frame_counter: u32,
+-    started: std::time::Instant,
+-    last_prepare: Option<std::time::Instant>,
++    started: web_time::Instant,
++    last_prepare: Option<web_time::Instant>,
+     custom: CustomUniforms,
+     /// `eyeBrightnessSmooth`, eased toward `eyeBrightness`.
+     eye_brightness_smooth: Option<[f32; 2]>,
+@@ -586,7 +586,7 @@ impl PackRenderer {
+             shadow_view_projection: Mat4::IDENTITY,
+             previous: None,
+             frame_counter: 0,
+-            started: std::time::Instant::now(),
++            started: web_time::Instant::now(),
+             last_prepare: None,
+             custom: pack.custom_uniforms.clone(),
+             eye_brightness_smooth: None,
+@@ -1027,7 +1027,7 @@ impl PackRenderer {
+             )));
+         }
+ 
+-        let now = std::time::Instant::now();
++        let now = web_time::Instant::now();
+         let frame_time = self
+             .last_prepare
+             .map_or(1.0 / 60.0, |last| (now - last).as_secs_f32());
+diff --git a/pomme-client/src/renderer/pipelines/skin_preview.rs b/pomme-client/src/renderer/pipelines/skin_preview.rs
+index 59f6c26..030d1cf 100644
+--- a/pomme-client/src/renderer/pipelines/skin_preview.rs
++++ b/pomme-client/src/renderer/pipelines/skin_preview.rs
+@@ -93,7 +93,7 @@ pub struct SkinPreviewPipeline {
+     arm_mvp_sets: [Vec<rhi::backend::BindGroup>; 2],
+     arm_mvp_buffers: [Vec<rhi::backend::Buffer>; 2],
+     armor_meshes: [PreviewArmorMesh; 4],
+-    swing_start: Option<std::time::Instant>,
++    swing_start: Option<web_time::Instant>,
+     slim: bool,
+ }
+ 
+@@ -190,7 +190,7 @@ impl SkinPreviewPipeline {
+     }
+ 
+     pub fn trigger_swing(&mut self) {
+-        self.swing_start = Some(std::time::Instant::now());
++        self.swing_start = Some(web_time::Instant::now());
+     }
+ 
+     #[allow(clippy::too_many_arguments)]
+diff --git a/pomme-client/src/renderer/pipelines/world_border.rs b/pomme-client/src/renderer/pipelines/world_border.rs
+index e878092..64e53c9 100644
+--- a/pomme-client/src/renderer/pipelines/world_border.rs
++++ b/pomme-client/src/renderer/pipelines/world_border.rs
+@@ -1,4 +1,4 @@
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use glam::DVec3;
+ 
 diff --git a/pomme-client/src/renderer/rhi/mod.rs b/pomme-client/src/renderer/rhi/mod.rs
-index fb38cea..151dddb 100644
+index fb38cea..1c7f294 100644
 --- a/pomme-client/src/renderer/rhi/mod.rs
 +++ b/pomme-client/src/renderer/rhi/mod.rs
-@@ -4,6 +4,14 @@
- //! Vulkan is the backend.
+@@ -1,13 +1,19 @@
+ //! Pomme's render hardware interface: backend-neutral descriptions of GPU
+ //! state, which the backend translates into its own objects. The shapes follow
+ //! WebGPU's (bind groups, vertex buffer layouts), apart from push constants;
+-//! Vulkan is the backend.
++//! Vulkan is the backend, and WebGPU in the browser.
  
++#[cfg(not(target_arch = "wasm32"))]
  pub mod vulkan;
 +#[cfg(target_arch = "wasm32")]
-+pub mod web_context;
-+#[cfg(target_arch = "wasm32")]
-+pub mod web_commands;
-+#[cfg(target_arch = "wasm32")]
-+pub mod web_resources;
-+#[cfg(target_arch = "wasm32")]
-+pub mod web_pipeline;
++pub mod web;
  
  /// The backend this build draws with; renderer code reaches the GPU only
  /// through it.
++#[cfg(not(target_arch = "wasm32"))]
+ pub use vulkan as backend;
++#[cfg(target_arch = "wasm32")]
++pub use web as backend;
+ 
+ /// A shader as [`crate::renderer::shader::include_shader`] gives it to the
+ /// backend.
+diff --git a/pomme-client/src/renderer/screenshot.rs b/pomme-client/src/renderer/screenshot.rs
+index 864df49..4d1dfc8 100644
+--- a/pomme-client/src/renderer/screenshot.rs
++++ b/pomme-client/src/renderer/screenshot.rs
+@@ -205,7 +205,7 @@ fn encode_and_write(
+ /// `Screenshot.getFile`: `<game dir>/screenshots/<timestamp>.png`; on
+ /// collision the counter starts at 2 (`name.png`, `name_2.png`, ...).
+ fn next_filename(dir: &Path) -> Result<(PathBuf, String), String> {
+-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
++    pomme_dirs::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+ 
+     let stamp = timestamp();
+     let mut n = 1u32;
+@@ -216,7 +216,7 @@ fn next_filename(dir: &Path) -> Result<(PathBuf, String), String> {
+             format!("{stamp}_{n}.png")
+         };
+         let path = dir.join(&name);
+-        if !path.exists() {
++        if !pomme_dirs::fs::exists(&path) {
+             return Ok((path, name));
+         }
+         n += 1;
+@@ -232,7 +232,7 @@ fn timestamp() -> String {
+ }
+ 
+ fn write_png(path: &Path, rgb: &[u8], width: u32, height: u32) -> Result<(), String> {
+-    let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
++    let file = pomme_dirs::fs::File::create(path).map_err(|e| e.to_string())?;
+     let mut encoder = png::Encoder::new(BufWriter::new(file), width, height);
+     encoder.set_color(png::ColorType::Rgb);
+     encoder.set_depth(png::BitDepth::Eight);
 diff --git a/pomme-client/src/renderer/shader.rs b/pomme-client/src/renderer/shader.rs
 index 41c7c08..4514ffc 100644
 --- a/pomme-client/src/renderer/shader.rs
@@ -1285,6 +2917,875 @@ index e6163db..e3205c9 100644
      vec4 glyph = mix(vec4(1.0, 1.0, 1.0, gray), colored, v_tex);
      if (glyph.a <= 0.05) discard;
      vec3 color = apply_fog(v_color.rgb * glyph.rgb, v_fog, v_fog_color);
+diff --git a/pomme-client/src/resources/mod.rs b/pomme-client/src/resources/mod.rs
+index ad0f349..5ee160e 100644
+--- a/pomme-client/src/resources/mod.rs
++++ b/pomme-client/src/resources/mod.rs
+@@ -53,7 +53,8 @@ pub(crate) use resource_id;
+ pub(crate) mod test_dir {
+     use std::path::PathBuf;
+     use std::sync::atomic::{AtomicU64, Ordering};
+-    use std::{fs, io};
++    use pomme_dirs::fs;
++use std::io;
+ 
+     static NEXT: AtomicU64 = AtomicU64::new(0);
+ 
+diff --git a/pomme-client/src/resources/pack_resources/file.rs b/pomme-client/src/resources/pack_resources/file.rs
+index 782a238..fe28160 100644
+--- a/pomme-client/src/resources/pack_resources/file.rs
++++ b/pomme-client/src/resources/pack_resources/file.rs
+@@ -2,7 +2,7 @@
+ 
+ use std::cell::RefCell;
+ use std::collections::HashSet;
+-use std::fs::File;
++use pomme_dirs::fs::File;
+ use std::io::{self, Read, Seek, SeekFrom};
+ use std::path::{Path, PathBuf};
+ use std::rc::Rc;
+@@ -410,7 +410,7 @@ impl Read for FilePackStream {
+ 
+ #[cfg(test)]
+ mod test_fixture {
+-    use std::fs::File;
++    use pomme_dirs::fs::File;
+     use std::io::Write;
+ 
+     use zip::ZipWriter;
+@@ -619,7 +619,7 @@ mod resources_supplier_tests {
+ 
+ #[cfg(test)]
+ mod failed_open_tests {
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use super::FilePackResources;
+     use super::test_fixture::default_location;
+diff --git a/pomme-client/src/resources/pack_resources/mapped.rs b/pomme-client/src/resources/pack_resources/mapped.rs
+index 95b4db0..0e7d571 100644
+--- a/pomme-client/src/resources/pack_resources/mapped.rs
++++ b/pomme-client/src/resources/pack_resources/mapped.rs
+@@ -3,7 +3,8 @@
+ use std::collections::{BTreeMap, HashSet};
+ use std::path::{Component, Path, PathBuf};
+ use std::rc::Rc;
+-use std::{fs, io};
++use pomme_dirs::fs;
++use std::io;
+ 
+ use serde_json::Value;
+ 
+@@ -266,7 +267,7 @@ fn valid_relative_path(path: &Path) -> bool {
+ #[cfg(test)]
+ mod test_fixture {
+     use std::collections::BTreeMap;
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use super::MappedPackResources;
+     use crate::resources::packs::PackLocationInfo;
+@@ -457,7 +458,7 @@ mod resources_supplier_tests {
+ #[cfg(test)]
+ mod aliases_only_tests {
+     use std::collections::BTreeMap;
+-    use std::fs;
++    use pomme_dirs::fs;
+     use std::path::PathBuf;
+ 
+     use super::MappedResourcesSupplier;
+@@ -514,7 +515,8 @@ mod aliases_only_tests {
+ mod path_validation {
+     use std::collections::BTreeMap;
+     use std::path::PathBuf;
+-    use std::{fs, io};
++    use pomme_dirs::fs;
++use std::io;
+ 
+     use super::test_fixture::default_location;
+     use super::{MappedPackResources, MappedResourcesSupplier};
+@@ -642,7 +644,7 @@ mod path_validation {
+ #[cfg(test)]
+ mod companion_tests {
+     use std::collections::BTreeMap;
+-    use std::fs;
++    use pomme_dirs::fs;
+     use std::path::PathBuf;
+ 
+     use super::MappedPackResources;
+diff --git a/pomme-client/src/resources/pack_resources/overlayed.rs b/pomme-client/src/resources/pack_resources/overlayed.rs
+index 2b2f94d..10e506a 100644
+--- a/pomme-client/src/resources/pack_resources/overlayed.rs
++++ b/pomme-client/src/resources/pack_resources/overlayed.rs
+@@ -120,7 +120,7 @@ impl PackResources for OverlayedPackResources {
+ #[cfg(test)]
+ mod test_fixture {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+     use std::rc::Rc;
+ 
+     use super::OverlayedPackResources;
+diff --git a/pomme-client/src/resources/pack_resources/path.rs b/pomme-client/src/resources/pack_resources/path.rs
+index a100a71..4774d03 100644
+--- a/pomme-client/src/resources/pack_resources/path.rs
++++ b/pomme-client/src/resources/pack_resources/path.rs
+@@ -2,7 +2,7 @@
+ 
+ use std::cell::RefCell;
+ use std::collections::HashSet;
+-use std::fs::{self, File};
++use pomme_dirs::fs::{self, File};
+ use std::io::{self, Read};
+ use std::path::{Path, PathBuf};
+ use std::rc::Rc;
+@@ -399,7 +399,7 @@ fn emit_resource(
+ #[cfg(test)]
+ mod test_fixture {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use super::PathPackResources;
+     use crate::resources::packs::PackLocationInfo;
+@@ -588,7 +588,7 @@ mod resources_supplier_tests {
+ #[cfg(test)]
+ mod path_validation {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use super::PathPackResources;
+     use super::test_fixture::default_location;
+diff --git a/pomme-client/src/resources/pack_resources/vanilla.rs b/pomme-client/src/resources/pack_resources/vanilla.rs
+index 693f584..c8c2d20 100644
+--- a/pomme-client/src/resources/pack_resources/vanilla.rs
++++ b/pomme-client/src/resources/pack_resources/vanilla.rs
+@@ -3,7 +3,7 @@
+ 
+ use std::cell::RefCell;
+ use std::collections::{HashMap, HashSet};
+-use std::fs::{self, File};
++use pomme_dirs::fs::{self, File};
+ use std::io::{self, BufReader};
+ use std::path::{Path, PathBuf};
+ use std::rc::Rc;
+@@ -199,7 +199,7 @@ impl PreparedVanillaResources {
+         // before the indexed/canonical face, independently for each face.
+         for face in 0..6 {
+             let path = extracted_root.join(format!("assets/panorama_{face}.png"));
+-            if !path.exists() {
++            if !pomme_dirs::fs::exists(&path) {
+                 continue;
+             }
+             let resource = format!("textures/gui/title/background/panorama_{face}.png");
+@@ -473,7 +473,7 @@ impl IndexedEntry {
+ #[cfg(test)]
+ mod test_fixture {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use serde_json::Map;
+ 
+@@ -670,7 +670,7 @@ mod pack_resources_tests {
+ #[cfg(test)]
+ mod resources_supplier_tests {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use serde_json::Map;
+ 
+@@ -701,7 +701,7 @@ mod resources_supplier_tests {
+ #[cfg(test)]
+ mod path_validation {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+     use std::rc::Rc;
+ 
+     use serde_json::{Map, json};
+@@ -920,7 +920,7 @@ mod path_validation {
+ 
+ #[cfg(test)]
+ mod metadata_fallback_tests {
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use serde_json::{Map, json};
+ 
+diff --git a/pomme-client/src/resources/packs/download.rs b/pomme-client/src/resources/packs/download.rs
+index 045a04c..7d857ee 100644
+--- a/pomme-client/src/resources/packs/download.rs
++++ b/pomme-client/src/resources/packs/download.rs
+@@ -13,10 +13,18 @@ pub(crate) fn download_server_pack(
+     let hash = parse_sha1(hash);
+     if let Some(hash) = &hash {
+         let dir = cache_dir.join(hash);
+-        if dir.is_dir() {
++        if pomme_dirs::fs::is_dir(&dir) {
+             return Ok(dir);
+         }
+     }
++    #[cfg(target_arch = "wasm32")]
++    let data: Vec<u8> = {
++        let _ = url;
++        return Err(PackDownloadError::Download(
++            "server resource packs aren't supported in the browser yet".into(),
++        ));
++    };
++    #[cfg(not(target_arch = "wasm32"))]
+     let data = crate::net::http::blocking_builder()
+         .build()
+         .and_then(|client| client.get(url).send())
+@@ -32,7 +40,7 @@ pub(crate) fn download_server_pack(
+         return Err(PackDownloadError::HashMismatch);
+     }
+     let dir = cache_dir.join(&actual);
+-    if !dir.is_dir() {
++    if !pomme_dirs::fs::is_dir(&dir) {
+         extract_zip(&data, &dir).map_err(|e| PackDownloadError::Extract(e.to_string()))?;
+     }
+     Ok(dir)
+@@ -63,7 +71,7 @@ impl std::fmt::Display for PackDownloadError {
+ impl std::error::Error for PackDownloadError {}
+ 
+ pub(crate) fn extract_zip(data: &[u8], dest: &Path) -> io::Result<()> {
+-    std::fs::create_dir_all(dest)?;
++    pomme_dirs::fs::create_dir_all(dest)?;
+     let cursor = io::Cursor::new(data);
+     let mut archive = zip::ZipArchive::new(cursor)?;
+     for i in 0..archive.len() {
+@@ -73,12 +81,12 @@ pub(crate) fn extract_zip(data: &[u8], dest: &Path) -> io::Result<()> {
+         };
+         let out_path = dest.join(enclosed);
+         if file.is_dir() {
+-            std::fs::create_dir_all(&out_path)?;
++            pomme_dirs::fs::create_dir_all(&out_path)?;
+         } else {
+             if let Some(parent) = out_path.parent() {
+-                std::fs::create_dir_all(parent)?;
++                pomme_dirs::fs::create_dir_all(parent)?;
+             }
+-            let mut out = std::fs::File::create(&out_path)?;
++            let mut out = pomme_dirs::fs::File::create(&out_path)?;
+             io::copy(&mut file, &mut out)?;
+         }
+     }
+diff --git a/pomme-client/src/resources/packs/pack.rs b/pomme-client/src/resources/packs/pack.rs
+index bb84163..28cb0d1 100644
+--- a/pomme-client/src/resources/packs/pack.rs
++++ b/pomme-client/src/resources/packs/pack.rs
+@@ -356,7 +356,7 @@ mod pack_api_tests {
+ 
+ #[cfg(test)]
+ mod pack_tests {
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use super::{
+         Component, Pack, PackEnablementConfig, PackFormat, PackLocationInfo, PackMetadata,
+diff --git a/pomme-client/src/resources/packs/sources/builtin.rs b/pomme-client/src/resources/packs/sources/builtin.rs
+index f8dd37f..167c7b5 100644
+--- a/pomme-client/src/resources/packs/sources/builtin.rs
++++ b/pomme-client/src/resources/packs/sources/builtin.rs
+@@ -202,7 +202,7 @@ impl RepositorySource for BuiltinRepositorySource {
+             let input = &installation.location;
+             let load = || -> io::Result<Pack> {
+                 let assets = input.extracted_root.join("assets");
+-                std::fs::read_dir(&assets).map_err(|error| {
++                pomme_dirs::fs::read_dir(&assets).map_err(|error| {
+                     path_error("open installed extracted assets", &assets, error)
+                 })?;
+                 let resources = Rc::new(VanillaResourcesSupplier::new(
+@@ -252,7 +252,7 @@ impl RepositorySource for BuiltinRepositorySource {
+             }
+         }
+         if let Some((BedrockUi { root, aliases }, id)) = &state.bedrock_ui
+-            && root.is_dir()
++            && pomme_dirs::fs::is_dir(&root)
+         {
+             match MappedResourcesSupplier::new(root.clone(), "bedrock".to_owned(), aliases.clone())
+             {
+@@ -294,7 +294,7 @@ fn load_theme(theme: &ThemeSpecification, id: &PackId) -> io::Result<Option<Pack
+     if !mount
+         .remappings
+         .values()
+-        .all(|face| mount.root.join(face).is_file())
++        .all(|face| pomme_dirs::fs::is_file(&mount.root.join(face)))
+     {
+         return Ok(None);
+     }
+@@ -426,7 +426,7 @@ fn read_format(path: &Path, expected_version: &str) -> Result<PackFormat, Format
+     }
+ 
+     let mut bytes = Vec::new();
+-    std::fs::File::open(path)?
++    pomme_dirs::fs::File::open(path)?
+         .take(MAX_VERSION_JSON_SIZE + 1)
+         .read_to_end(&mut bytes)?;
+     if bytes.len() as u64 > MAX_VERSION_JSON_SIZE {
+@@ -479,14 +479,14 @@ mod repository_source_tests {
+             (r#"{"resource_major": 75, "resource_minor": 1}"#, (75, 1)),
+         ] {
+             let json = format!(r#"{{"id": "26.2", "pack_version": {pack_version}}}"#);
+-            std::fs::write(&path, json).unwrap();
++            pomme_dirs::fs::write(&path, json).unwrap();
+             assert_eq!(
+                 read_installed_pack_format(&path, "26.2").unwrap(),
+                 PackFormat::new(major, minor).unwrap()
+             );
+         }
+         assert!(read_installed_pack_format(&path, "26.1").is_err());
+-        std::fs::remove_file(&path).unwrap();
++        pomme_dirs::fs::remove_file(&path).unwrap();
+         assert!(read_installed_pack_format(&path, "26.2").is_err());
+     }
+ 
+@@ -511,16 +511,16 @@ mod repository_source_tests {
+     fn a_theme_loads_only_with_all_six_faces() {
+         let temp = crate::resources::test_dir::TempDir::new().unwrap();
+         let faces = temp.0.join("panoramas");
+-        std::fs::create_dir_all(&faces).unwrap();
++        pomme_dirs::fs::create_dir_all(&faces).unwrap();
+         let theme = ThemeSpecification::Pomme {
+             root: temp.0.clone(),
+         };
+         let id = crate::resources::packs::PackId::allocate();
+         for face in 0..5 {
+-            std::fs::write(faces.join(format!("panorama_{face}.png")), b"face").unwrap();
++            pomme_dirs::fs::write(faces.join(format!("panorama_{face}.png")), b"face").unwrap();
+         }
+         assert!(super::load_theme(&theme, &id).unwrap().is_none());
+-        std::fs::write(faces.join("panorama_5.png"), b"face").unwrap();
++        pomme_dirs::fs::write(faces.join("panorama_5.png"), b"face").unwrap();
+         assert!(super::load_theme(&theme, &id).unwrap().is_some());
+     }
+ }
+diff --git a/pomme-client/src/resources/packs/sources/folder.rs b/pomme-client/src/resources/packs/sources/folder.rs
+index 80f682e..80ace45 100644
+--- a/pomme-client/src/resources/packs/sources/folder.rs
++++ b/pomme-client/src/resources/packs/sources/folder.rs
+@@ -88,7 +88,7 @@ impl RepositorySource for FolderRepositorySource {
+                 }
+                 // Like Java, an unlistable optional root contributes no packs.
+                 // COMPAT: Directory creation belongs to AppCore, not this source.
+-                let entries = match std::fs::read_dir(root) {
++                let entries = match pomme_dirs::fs::read_dir(root) {
+                     Ok(entries) => entries,
+                     Err(error) => {
+                         tracing::warn!(path = %root.display(), %error, "Cannot scan resource pack discovery root; skipping root");
+@@ -172,7 +172,7 @@ impl RepositorySource for FolderRepositorySource {
+ 
+ #[cfg(test)]
+ mod repository_source_tests {
+-    use std::fs::{self, File};
++    use pomme_dirs::fs::{self, File};
+     use std::io::Write;
+ 
+     use zip::ZipWriter;
+@@ -228,7 +228,7 @@ mod repository_source_tests {
+ // environment.
+ #[cfg(all(test, unix))]
+ mod path_validation {
+-    use std::fs;
++    use pomme_dirs::fs;
+     use std::os::unix::fs::symlink;
+ 
+     use super::super::path_validation::assert_load_packs_catalog;
+diff --git a/pomme-client/src/resources/packs/sources/registered.rs b/pomme-client/src/resources/packs/sources/registered.rs
+index f3433a3..da43750 100644
+--- a/pomme-client/src/resources/packs/sources/registered.rs
++++ b/pomme-client/src/resources/packs/sources/registered.rs
+@@ -24,7 +24,7 @@ impl PhysicalPack {
+     }
+ 
+     fn prepare(&self, policy: &SymlinkPolicy) -> io::Result<Rc<dyn ResourcesSupplier>> {
+-        let kind = std::fs::symlink_metadata(self.path())?.file_type();
++        let kind = pomme_dirs::fs::symlink_metadata(self.path())?.file_type();
+         let (path, kind) = prepare_pack_path(self.path(), kind, policy)?;
+         if !kind.is_dir() {
+             return Err(io::Error::new(
+@@ -175,7 +175,7 @@ impl RepositorySource for RegisteredRepositorySource {
+ #[cfg(test)]
+ mod repository_source_tests {
+ 
+-    use std::fs;
++    use pomme_dirs::fs;
+ 
+     use super::super::tests;
+     use super::{PhysicalPack, RegisteredRepositorySource};
+@@ -216,7 +216,7 @@ mod repository_source_tests {
+ // environment.
+ #[cfg(all(test, unix))]
+ mod path_validation {
+-    use std::fs;
++    use pomme_dirs::fs;
+     use std::os::unix::fs::symlink;
+     use std::path::PathBuf;
+ 
+diff --git a/pomme-client/src/resources/packs/sources/symlinks.rs b/pomme-client/src/resources/packs/sources/symlinks.rs
+index 891069c..2865c1e 100644
+--- a/pomme-client/src/resources/packs/sources/symlinks.rs
++++ b/pomme-client/src/resources/packs/sources/symlinks.rs
+@@ -1,6 +1,6 @@
+ //! Shared setup-time symlink policy for discovery and explicit registrations.
+ 
+-use std::fs::FileType;
++use pomme_dirs::fs::FileType;
+ use std::io;
+ use std::path::{Path, PathBuf};
+ use std::rc::Rc;
+@@ -28,10 +28,10 @@ impl SymlinkPolicy {
+     /// Vanilla `LevelStorageSource.parseValidator`: no file denies every
+     /// symlink quietly, and any read or parse error discards the whole list.
+     pub(crate) fn load(path: &Path) -> Self {
+-        if !path.exists() {
++        if !pomme_dirs::fs::exists(&path) {
+             return Self::default();
+         }
+-        match std::fs::read_to_string(path).and_then(|text| parse_symlinks(&text)) {
++        match pomme_dirs::fs::read_to_string(path).and_then(|text| parse_symlinks(&text)) {
+             Ok(rules) => Self {
+                 rules: rules.into(),
+             },
+@@ -205,7 +205,7 @@ fn glob_to_regex(glob: &str, dos: bool) -> Result<String, String> {
+ }
+ 
+ fn validate_symlink(path: &Path, rules: &[SymlinkRule]) -> io::Result<PathBuf> {
+-    let target = std::fs::read_link(path)?;
++    let target = pomme_dirs::fs::read_link(path)?;
+     // Match the stored target; non-UTF8 fails closed, never lossy matching.
+     let allowed = target.to_str().is_some_and(|target| {
+         rules.iter().any(|rule| match rule {
+@@ -244,7 +244,7 @@ pub(super) fn prepare_pack_path(
+         // Java PackDetector follows one stored target, relative to CWD, not
+         // the link parent. Open this effective path, never the original alias.
+         effective = validate_symlink(path, rules)?;
+-        kind = std::fs::symlink_metadata(&effective)?.file_type();
++        kind = pomme_dirs::fs::symlink_metadata(&effective)?.file_type();
+     }
+     if kind.is_dir() {
+         validate_pack_tree(&effective, rules)?;
+@@ -261,7 +261,7 @@ pub(super) fn prepare_pack_path(
+ }
+ 
+ fn validate_pack_tree(root: &Path, rules: &[SymlinkRule]) -> io::Result<()> {
+-    for entry in std::fs::read_dir(root)? {
++    for entry in pomme_dirs::fs::read_dir(root)? {
+         let entry = entry?;
+         let kind = entry.file_type()?;
+         if kind.is_symlink() {
+@@ -328,7 +328,7 @@ mod tests {
+     /// `parseValidator`: no file, or any bad line, denies every symlink.
+     #[test]
+     fn load_denies_all_unless_the_whole_file_parses() {
+-        use std::fs;
++        use pomme_dirs::fs;
+ 
+         use super::SymlinkPolicy;
+         use crate::resources::test_dir::TempDir;
+diff --git a/pomme-client/src/shaderpack/mod.rs b/pomme-client/src/shaderpack/mod.rs
+index 30cd1a4..4392fd8 100644
+--- a/pomme-client/src/shaderpack/mod.rs
++++ b/pomme-client/src/shaderpack/mod.rs
+@@ -99,7 +99,7 @@ impl ShaderPack {
+             .file_name()
+             .map(|n| n.to_string_lossy().into_owned())
+             .unwrap_or_default();
+-        let overrides = std::fs::read_to_string(path.with_file_name(format!("{name}.txt")))
++        let overrides = pomme_dirs::fs::read_to_string(path.with_file_name(format!("{name}.txt")))
+             .map(|text| preprocess::parse_overrides(&text))
+             .unwrap_or_default();
+         let mut macros = options::macros(&options::discover(&source), &overrides);
+@@ -366,7 +366,7 @@ mod corpus {
+         };
+         let mut failed = 0;
+         let mut total = 0;
+-        for entry in std::fs::read_dir(dir).expect("corpus folder").flatten() {
++        for entry in pomme_dirs::fs::read_dir(dir).expect("corpus folder").flatten() {
+             let pack = match ShaderPack::open(&entry.path()) {
+                 Ok(pack) => pack,
+                 Err(e) => {
+@@ -389,8 +389,8 @@ mod corpus {
+                     && let Ok(t) = translate(&text, geometry, AlphaTest::ONE_TENTH)
+                 {
+                     let base = format!("{dump}/{}", text.path.replace('/', "_"));
+-                    std::fs::write(format!("{base}.vert"), &t.vertex).unwrap();
+-                    std::fs::write(format!("{base}.frag"), &t.fragment).unwrap();
++                    pomme_dirs::fs::write(format!("{base}.vert"), &t.vertex).unwrap();
++                    pomme_dirs::fs::write(format!("{base}.frag"), &t.fragment).unwrap();
+                 }
+                 match compile(&text, geometry, AlphaTest::ONE_TENTH) {
+                     Ok(_) => println!("  ok   {}", text.path),
+diff --git a/pomme-client/src/shaderpack/source.rs b/pomme-client/src/shaderpack/source.rs
+index 6a559b3..1c4da7e 100644
+--- a/pomme-client/src/shaderpack/source.rs
++++ b/pomme-client/src/shaderpack/source.rs
+@@ -23,15 +23,15 @@ pub enum SourceError {
+ 
+ impl PackSource {
+     pub fn open(path: &Path) -> Result<Self, SourceError> {
+-        if path.is_dir() {
++        if pomme_dirs::fs::is_dir(&path) {
+             let shaders = path.join("shaders");
+-            return if shaders.is_dir() {
++            return if pomme_dirs::fs::is_dir(&shaders) {
+                 Ok(Self::Dir(shaders))
+             } else {
+                 Err(SourceError::NoShaders)
+             };
+         }
+-        let mut archive = zip::ZipArchive::new(std::fs::File::open(path)?)?;
++        let mut archive = zip::ZipArchive::new(pomme_dirs::fs::File::open(path)?)?;
+         // Some zips nest the pack in a folder: take the shallowest `shaders/`.
+         let prefix = (0..archive.len())
+             .filter_map(|i| {
+@@ -66,7 +66,7 @@ impl PackSource {
+     /// The file at `path`, relative to `shaders/` with `/` separators.
+     pub fn read(&self, path: &str) -> Option<String> {
+         let bytes = match self {
+-            Self::Dir(root) => std::fs::read(root.join(inside(path)?)).ok()?,
++            Self::Dir(root) => pomme_dirs::fs::read(root.join(inside(path)?)).ok()?,
+             Self::Zip(files) => files.get(path)?.clone(),
+         };
+         Some(String::from_utf8_lossy(&bytes).into_owned())
+@@ -79,9 +79,9 @@ impl PackSource {
+                 let mut files = Vec::new();
+                 let mut dirs = vec![root.clone()];
+                 while let Some(dir) = dirs.pop() {
+-                    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
++                    for entry in pomme_dirs::fs::read_dir(dir).into_iter().flatten().flatten() {
+                         let path = entry.path();
+-                        if path.is_dir() {
++                        if pomme_dirs::fs::is_dir(&path) {
+                             dirs.push(path);
+                         } else if let Ok(rel) = path.strip_prefix(root) {
+                             files.push(rel.to_string_lossy().replace('\\', "/"));
+@@ -98,14 +98,14 @@ impl PackSource {
+ 
+     pub fn exists(&self, path: &str) -> bool {
+         match self {
+-            Self::Dir(root) => inside(path).is_some_and(|p| root.join(p).is_file()),
++            Self::Dir(root) => inside(path).is_some_and(|p| pomme_dirs::fs::is_file(&root.join(p))),
+             Self::Zip(files) => files.contains_key(path),
+         }
+     }
+ 
+     pub fn has_folder(&self, path: &str) -> bool {
+         match self {
+-            Self::Dir(root) => inside(path).is_some_and(|p| root.join(p).is_dir()),
++            Self::Dir(root) => inside(path).is_some_and(|p| pomme_dirs::fs::is_dir(&root.join(p))),
+             Self::Zip(files) => {
+                 let prefix = format!("{path}/");
+                 files.keys().any(|f| f.starts_with(&prefix))
+@@ -132,7 +132,7 @@ mod tests {
+     #[test]
+     fn nested_zip_shaders_folder() {
+         let path = std::env::temp_dir().join(format!("pomme_pack_{}.zip", std::process::id()));
+-        let mut zip = zip::ZipWriter::new(std::fs::File::create(&path).unwrap());
++        let mut zip = zip::ZipWriter::new(pomme_dirs::fs::File::create(&path).unwrap());
+         for name in [
+             "sildurs_shaders/readme.txt",
+             "sildurs_shaders/shaders/final.fsh",
+@@ -143,7 +143,7 @@ mod tests {
+         }
+         zip.finish().unwrap();
+         let source = PackSource::open(&path);
+-        std::fs::remove_file(&path).unwrap();
++        pomme_dirs::fs::remove_file(&path).unwrap();
+         assert!(source.unwrap().exists("final.fsh"));
+     }
+ 
+diff --git a/pomme-client/src/singleplayer.rs b/pomme-client/src/singleplayer.rs
+index 0eb98ef..3a61101 100644
+--- a/pomme-client/src/singleplayer.rs
++++ b/pomme-client/src/singleplayer.rs
+@@ -17,7 +17,7 @@ pub const UNAVAILABLE_MESSAGE: &str = "This build was compiled without singlepla
+ 
+ #[cfg(feature = "singleplayer")]
+ mod steel {
+-    use std::fs::{File, OpenOptions, TryLockError};
++    use pomme_dirs::fs::{File, OpenOptions, TryLockError};
+     use std::path::{Path, PathBuf};
+ 
+     use pomme_singleplayer::{
+diff --git a/pomme-client/src/test_util.rs b/pomme-client/src/test_util.rs
+index 40db6c7..0957cf1 100644
+--- a/pomme-client/src/test_util.rs
++++ b/pomme-client/src/test_util.rs
+@@ -12,8 +12,8 @@ use crate::resources::packs::PackLocationInfo;
+ /// A fresh directory name under the system temp dir; the test creates and
+ /// removes it.
+ pub fn test_temp_dir(label: &str) -> PathBuf {
+-    let nonce = std::time::SystemTime::now()
+-        .duration_since(std::time::UNIX_EPOCH)
++    let nonce = web_time::SystemTime::now()
++        .duration_since(web_time::UNIX_EPOCH)
+         .unwrap()
+         .as_nanos();
+     std::env::temp_dir().join(format!("pomme_{label}_{}_{}", std::process::id(), nonce))
+diff --git a/pomme-client/src/ui/anvil.rs b/pomme-client/src/ui/anvil.rs
+index 5adc2e3..b5ecafd 100644
+--- a/pomme-client/src/ui/anvil.rs
++++ b/pomme-client/src/ui/anvil.rs
+@@ -2,7 +2,7 @@
+ //! result 2, player inventory 3..29, hotbar 30..38, plus the rename text
+ //! field. The repair cost arrives as menu data value 0.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/boss_bar.rs b/pomme-client/src/ui/boss_bar.rs
+index fb463f2..fda6a22 100644
+--- a/pomme-client/src/ui/boss_bar.rs
++++ b/pomme-client/src/ui/boss_bar.rs
+@@ -2,7 +2,7 @@
+ //! The server drives everything via `ClientboundBossEvent`; the client only
+ //! stores what it's told and lerps displayed progress.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_protocol::hud::BossFlags;
+ 
+diff --git a/pomme-client/src/ui/brewing_stand.rs b/pomme-client/src/ui/brewing_stand.rs
+index 2a9aff6..f6f22de 100644
+--- a/pomme-client/src/ui/brewing_stand.rs
++++ b/pomme-client/src/ui/brewing_stand.rs
+@@ -2,7 +2,7 @@
+ //! `BrewingStandMenu`): bottle slots 0..3, ingredient 3, fuel 4, player
+ //! inventory 5..32, hotbar 32..41.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/chat.rs b/pomme-client/src/ui/chat.rs
+index 6d1fb5b..cadf2c2 100644
+--- a/pomme-client/src/ui/chat.rs
++++ b/pomme-client/src/ui/chat.rs
+@@ -2,7 +2,7 @@ use std::cell::OnceCell;
+ use std::collections::VecDeque;
+ use std::ops::Range;
+ use std::sync::Arc;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::components::{AttributeModifiers, MaxDamage, Rarity};
+ use pomme_registry::builtin::ItemKind;
+diff --git a/pomme-client/src/ui/chest.rs b/pomme-client/src/ui/chest.rs
+index 82997fa..be79f51 100644
+--- a/pomme-client/src/ui/chest.rs
++++ b/pomme-client/src/ui/chest.rs
+@@ -4,7 +4,7 @@
+ //! (`DispenserScreen`): contents slots first, then player inventory and
+ //! hotbar.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/common.rs b/pomme-client/src/ui/common.rs
+index ff248d2..f2fd2fe 100644
+--- a/pomme-client/src/ui/common.rs
++++ b/pomme-client/src/ui/common.rs
+@@ -356,7 +356,10 @@ pub(crate) fn get_clipboard() -> String {
+     return unsafe { objc2_ui_kit::UIPasteboard::generalPasteboard().string() }
+         .map(|text| text.to_string())
+         .unwrap_or_default();
+-    #[cfg(not(mobile))]
++    // TODO: the browser's clipboard is asynchronous and asks permission.
++    #[cfg(target_arch = "wasm32")]
++    return String::new();
++    #[cfg(not(any(mobile, target_arch = "wasm32")))]
+     arboard::Clipboard::new()
+         .and_then(|mut cb| cb.get_text())
+         .unwrap_or_default()
+@@ -376,7 +379,12 @@ pub(crate) fn set_clipboard(text: &str) -> bool {
+         unsafe { objc2_ui_kit::UIPasteboard::generalPasteboard().setString(Some(&text)) };
+         true
+     }
+-    #[cfg(not(mobile))]
++    #[cfg(target_arch = "wasm32")]
++    {
++        let _ = text;
++        false
++    }
++    #[cfg(not(any(mobile, target_arch = "wasm32")))]
+     match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(text)) {
+         Ok(()) => true,
+         Err(err) => {
+diff --git a/pomme-client/src/ui/container.rs b/pomme-client/src/ui/container.rs
+index 46aa026..4132ff0 100644
+--- a/pomme-client/src/ui/container.rs
++++ b/pomme-client/src/ui/container.rs
+@@ -2,7 +2,7 @@
+ //! furnace): the click/drag gesture state machine and per-frame slot drawing.
+ 
+ use std::collections::HashMap;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/crafter.rs b/pomme-client/src/ui/crafter.rs
+index 9b9274d..ee856a0 100644
+--- a/pomme-client/src/ui/crafter.rs
++++ b/pomme-client/src/ui/crafter.rs
+@@ -3,7 +3,7 @@
+ //! slots toggle between enabled and disabled when clicked (see
+ //! `crafter_slot_clicked` in the in-game phase).
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/crafting_table.rs b/pomme-client/src/ui/crafting_table.rs
+index 89a7ba2..ad721f3 100644
+--- a/pomme-client/src/ui/crafting_table.rs
++++ b/pomme-client/src/ui/crafting_table.rs
+@@ -1,7 +1,7 @@
+ //! The crafting table screen (vanilla `CraftingScreen` + `CraftingMenu`):
+ //! result slot 0, 3x3 grid 1..9, player inventory 10..36, hotbar 37..45.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/creative_inventory.rs b/pomme-client/src/ui/creative_inventory.rs
+index 3fcec44..9cac624 100644
+--- a/pomme-client/src/ui/creative_inventory.rs
++++ b/pomme-client/src/ui/creative_inventory.rs
+@@ -1,6 +1,6 @@
+ use std::collections::HashMap;
+ use std::sync::OnceLock;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::components::{BlockItemStateProperties, EquipmentSlot, Equippable};
+ use pomme_item::defaults::ItemKindExt;
+diff --git a/pomme-client/src/ui/debug_entries.rs b/pomme-client/src/ui/debug_entries.rs
+index b46aa56..5f98424 100644
+--- a/pomme-client/src/ui/debug_entries.rs
++++ b/pomme-client/src/ui/debug_entries.rs
+@@ -176,11 +176,11 @@ impl DebugEntries {
+             profile: None,
+             path: game_dir.join("debug-profile.json"),
+         };
+-        if !entries.path.is_file() {
++        if !pomme_dirs::fs::is_file(&entries.path) {
+             entries.reset_to_profile(DebugProfile::Default);
+             return entries;
+         }
+-        let saved = std::fs::read_to_string(&entries.path)
++        let saved = pomme_dirs::fs::read_to_string(&entries.path)
+             .map_err(|e| e.to_string())
+             .and_then(|text| {
+                 serde_json::from_str::<SerializedOptions>(&text).map_err(|e| e.to_string())
+@@ -440,7 +440,7 @@ mod tests {
+     #[test]
+     fn setting_a_status_leaves_the_profile_and_saves() {
+         let dir = crate::test_util::test_temp_dir("debug_entries");
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         let mut list = DebugEntries::load(&dir);
+         assert!(list.is_using_profile(DebugProfile::Default));
+         list.set_status(FRAME_TIME_LOWS.id, DebugEntryStatus::AlwaysOn);
+@@ -456,21 +456,21 @@ mod tests {
+         assert_eq!(reloaded.status(FPS.id), DebugEntryStatus::InOverlay);
+         list.load_profile(DebugProfile::Performance);
+         assert!(DebugEntries::load(&dir).is_using_profile(DebugProfile::Performance));
+-        std::fs::remove_dir_all(&dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ 
+     #[test]
+     fn an_unreadable_file_resets_to_the_default_profile() {
+         let dir = crate::test_util::test_temp_dir("debug_entries_bad");
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         let path = dir.join("debug-profile.json");
+-        std::fs::write(&path, "{").unwrap();
++        pomme_dirs::fs::write(&path, "{").unwrap();
+         assert!(DebugEntries::load(&dir).is_using_profile(DebugProfile::Default));
+         assert_eq!(
+-            std::fs::read_to_string(&path).unwrap(),
++            pomme_dirs::fs::read_to_string(&path).unwrap(),
+             r#"{"profile":"default","DataVersion":5023}"#
+         );
+-        std::fs::remove_dir_all(&dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ 
+     #[test]
+diff --git a/pomme-client/src/ui/enchantment.rs b/pomme-client/src/ui/enchantment.rs
+index 7e7ec5d..8c923e7 100644
+--- a/pomme-client/src/ui/enchantment.rs
++++ b/pomme-client/src/ui/enchantment.rs
+@@ -4,7 +4,7 @@
+ //! values are the three level costs, the enchantment seed, and the three
+ //! enchantment/level clues.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use glam::FloatExt;
+ use pomme_item::ItemStack;
+diff --git a/pomme-client/src/ui/font.rs b/pomme-client/src/ui/font.rs
+index addc65f..f2b6f3f 100644
+--- a/pomme-client/src/ui/font.rs
++++ b/pomme-client/src/ui/font.rs
+@@ -1607,13 +1607,13 @@ mod tests {
+ 
+         fn write(&self, path: impl AsRef<Path>, contents: impl AsRef<[u8]>) {
+             let path = self.path(path.as_ref());
+-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+-            std::fs::write(path, contents).unwrap();
++            pomme_dirs::fs::create_dir_all(path.parent().unwrap()).unwrap();
++            pomme_dirs::fs::write(path, contents).unwrap();
+         }
+ 
+         fn write_png(&self, path: impl AsRef<Path>, image: &image::RgbaImage) {
+             let path = self.path(path.as_ref());
+-            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
++            pomme_dirs::fs::create_dir_all(path.parent().unwrap()).unwrap();
+             image.save(path).unwrap();
+         }
+ 
+@@ -1642,7 +1642,7 @@ mod tests {
+ 
+     impl Drop for Fixture {
+         fn drop(&mut self) {
+-            let _ = std::fs::remove_dir_all(&self.root);
++            let _ = pomme_dirs::fs::remove_dir_all(&self.root);
+         }
+     }
+ 
+@@ -1992,13 +1992,13 @@ mod tests {
+             r#"{"providers":[{"type":"space","advances":{"B":7.0}}]}"#,
+         );
+         let pack = fixture.root.join("instance/resourcepacks/bad");
+-        std::fs::create_dir_all(pack.join("assets/example/font")).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::create_dir_all(pack.join("assets/example/font")).unwrap();
++        pomme_dirs::fs::write(
+             pack.join("pack.mcmeta"),
+             r#"{"pack":{"pack_format":55,"description":"bad"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             pack.join("assets/example/font/mixed.json"),
+             r#"{"providers":[{"type":"bogus"},{"type":"space","advances":{"B":9.0}}]}"#,
+         )
 diff --git a/pomme-client/src/ui/friends.rs b/pomme-client/src/ui/friends.rs
 index 167db95..b8a92b8 100644
 --- a/pomme-client/src/ui/friends.rs
@@ -1316,11 +3817,66 @@ index 167db95..b8a92b8 100644
      access_token: String,
      action: FriendAction,
      data: &FriendsData,
+diff --git a/pomme-client/src/ui/furnace.rs b/pomme-client/src/ui/furnace.rs
+index 4945685..20ab11f 100644
+--- a/pomme-client/src/ui/furnace.rs
++++ b/pomme-client/src/ui/furnace.rs
+@@ -3,7 +3,7 @@
+ //! inventory 3..29, hotbar 30..38. Covers the furnace, blast furnace, and
+ //! smoker, which differ only in textures.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
+diff --git a/pomme-client/src/ui/inventory.rs b/pomme-client/src/ui/inventory.rs
+index 6bfd5fa..694d990 100644
+--- a/pomme-client/src/ui/inventory.rs
++++ b/pomme-client/src/ui/inventory.rs
+@@ -1,4 +1,4 @@
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_item::ItemStack;
+ 
 diff --git a/pomme-client/src/ui/menu/account.rs b/pomme-client/src/ui/menu/account.rs
-index 55b2297..e79d0fd 100644
+index 55b2297..fb14b38 100644
 --- a/pomme-client/src/ui/menu/account.rs
 +++ b/pomme-client/src/ui/menu/account.rs
-@@ -89,7 +89,7 @@ impl MainMenu {
+@@ -56,19 +56,18 @@ impl MainMenu {
+         let store = Arc::clone(&self.account_store);
+         self.run_sign_in(true, |progress| async move {
+             let http = crate::net::http::client();
+-            if cfg!(mobile) {
+-                pomme_auth::device_code_sign_in(http, &*store, |code| {
+-                    progress.set(SignIn::Code(code.clone()));
+-                })
+-                .await
+-            } else {
+-                pomme_auth::browser_sign_in(http, &*store, |url| {
+-                    crate::util::open_url(url);
+-                    progress.set(SignIn::Browser(url.to_owned()));
+-                })
+-                .await
+-            }
+-            .map(Some)
++            #[cfg(any(mobile, target_arch = "wasm32"))]
++            let signed_in = pomme_auth::device_code_sign_in(http, &*store, |code| {
++                progress.set(SignIn::Code(code.clone()));
++            })
++            .await;
++            #[cfg(not(any(mobile, target_arch = "wasm32")))]
++            let signed_in = pomme_auth::browser_sign_in(http, &*store, |url| {
++                crate::util::open_url(url);
++                progress.set(SignIn::Browser(url.to_owned()));
++            })
++            .await;
++            signed_in.map(Some)
+         });
+     }
+ 
+@@ -89,7 +88,7 @@ impl MainMenu {
  
      fn run_sign_in<F>(&mut self, by_player: bool, sign_in: impl FnOnce(SignInProgress) -> F)
      where
@@ -1329,10 +3885,34 @@ index 55b2297..e79d0fd 100644
      {
          let progress = self.new_attempt(SignIn::Requesting);
          let task = sign_in(progress.clone());
+diff --git a/pomme-client/src/ui/menu/helpers.rs b/pomme-client/src/ui/menu/helpers.rs
+index d86ed14..96109ca 100644
+--- a/pomme-client/src/ui/menu/helpers.rs
++++ b/pomme-client/src/ui/menu/helpers.rs
+@@ -339,8 +339,8 @@ pub(super) fn push_server_status(
+ 
+     match state {
+         PingState::Pinging => {
+-            let millis = std::time::SystemTime::now()
+-                .duration_since(std::time::UNIX_EPOCH)
++            let millis = web_time::SystemTime::now()
++                .duration_since(web_time::UNIX_EPOCH)
+                 .unwrap_or_default()
+                 .as_millis();
+             let frame = match (millis / 100) % 8 {
 diff --git a/pomme-client/src/ui/menu/mod.rs b/pomme-client/src/ui/menu/mod.rs
-index 83719ef..039a5aa 100644
+index 83719ef..3812ae8 100644
 --- a/pomme-client/src/ui/menu/mod.rs
 +++ b/pomme-client/src/ui/menu/mod.rs
+@@ -14,7 +14,7 @@ mod worlds;
+ 
+ use std::path::{Path, PathBuf};
+ use std::sync::Arc;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_install::client::Channel;
+ use serde::{Deserialize, Serialize};
 @@ -215,8 +215,9 @@ const CHUNK_DETAIL_MIN: u32 = 8;
  pub const CHUNK_DETAIL_OFF: u32 = 49;
  const CHUNK_DETAIL_SPAN: f32 = (CHUNK_DETAIL_OFF - CHUNK_DETAIL_MIN) as f32;
@@ -1370,6 +3950,15 @@ index 83719ef..039a5aa 100644
      }
  }
  
+@@ -388,7 +394,7 @@ pub(crate) fn saved_chunk_detail(game_dir: &Path) -> u32 {
+ 
+ fn load_settings(game_dir: &Path) -> Settings {
+     let path = game_dir.join("options.json");
+-    std::fs::read_to_string(&path)
++    pomme_dirs::fs::read_to_string(&path)
+         .ok()
+         .and_then(|s| serde_json::from_str(&s).ok())
+         .unwrap_or_default()
 @@ -860,12 +866,12 @@ pub struct MainMenu {
      pending_remove: Option<(String, String)>,
      account_store: Arc<dyn pomme_auth::SecretStore>,
@@ -1394,6 +3983,32 @@ index 83719ef..039a5aa 100644
          username: String,
          version: String,
          access_token: Option<String>,
+@@ -2015,14 +2021,14 @@ mod tests {
+     fn advanced_tooltips_survive_a_restart() {
+         let dir =
+             std::env::temp_dir().join(format!("pomme-advanced-tooltips-{}", std::process::id()));
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         let mut key_bindings = KeyBindings::default();
+         let mut menu = test_menu(dir.to_str().unwrap(), &mut key_bindings);
+         assert!(!menu.advanced_item_tooltips);
+         assert!(menu.toggle_advanced_item_tooltips(&key_bindings));
+         let menu = test_menu(dir.to_str().unwrap(), &mut key_bindings);
+         assert!(menu.advanced_item_tooltips);
+-        std::fs::remove_dir_all(&dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ 
+     #[test]
+@@ -2042,7 +2048,7 @@ mod tests {
+         assert!(menu.take_options_saved(), "a replaced options screen saves");
+         menu.screen_removed(false, &key_bindings);
+         assert!(!menu.take_options_saved());
+-        std::fs::remove_dir_all(&dir).ok();
++        pomme_dirs::fs::remove_dir_all(&dir).ok();
+     }
+ 
+     #[test]
 @@ -2093,7 +2099,10 @@ mod tests {
          assert_eq!(distant_terrain_step(0), 0);
          assert_eq!(distant_terrain_chunks(distant_terrain_step(8)), 32);
@@ -1406,8 +4021,26 @@ index 83719ef..039a5aa 100644
          for step in 0..=DISTANT_TERRAIN_STEPS {
              assert_eq!(distant_terrain_step(distant_terrain_chunks(step)), step);
          }
+@@ -2112,7 +2121,7 @@ mod tests {
+     #[test]
+     fn a_chunk_bench_saves_the_players_render_distance_and_reads_their_chunk_detail() {
+         let dir = std::env::temp_dir().join(format!("pomme-bench-rd-{}", std::process::id()));
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         let mut key_bindings = KeyBindings::default();
+         let mut menu = test_menu(dir.to_str().unwrap(), &mut key_bindings);
+         menu.render_distance = 12;
+@@ -2121,7 +2130,7 @@ mod tests {
+         menu.save_settings(&key_bindings);
+         let saved = load_settings(&dir).render_distance;
+         let chunk_detail = saved_chunk_detail(&dir);
+-        std::fs::remove_dir_all(&dir).ok();
++        pomme_dirs::fs::remove_dir_all(&dir).ok();
+         assert_eq!(saved, 12);
+         assert_eq!(menu.render_distance, 2);
+         assert_eq!(chunk_detail, 4);
 diff --git a/pomme-client/src/ui/menu/options.rs b/pomme-client/src/ui/menu/options.rs
-index dc22568..1bb9210 100644
+index dc22568..11efd18 100644
 --- a/pomme-client/src/ui/menu/options.rs
 +++ b/pomme-client/src/ui/menu/options.rs
 @@ -2336,10 +2336,11 @@ impl MainMenu {
@@ -1423,10 +4056,89 @@ index dc22568..1bb9210 100644
              let _ = open::that_detached(&self.packs_dir);
          }
  
+@@ -2455,13 +2456,13 @@ impl MainMenu {
+ /// The pack after `current` in `dir` (folders and zips, by name), wrapping
+ /// through off.
+ fn next_shader_pack(dir: &std::path::Path, current: Option<&str>) -> Option<String> {
+-    let mut packs: Vec<String> = std::fs::read_dir(dir)
++    let mut packs: Vec<String> = pomme_dirs::fs::read_dir(dir)
+         .into_iter()
+         .flatten()
+         .flatten()
+         .filter(|entry| {
+             let path = entry.path();
+-            path.is_dir()
++            pomme_dirs::fs::is_dir(&path)
+                 || path
+                     .extension()
+                     .is_some_and(|e| e.eq_ignore_ascii_case("zip"))
+@@ -2925,17 +2926,17 @@ mod tests {
+     /// A grid whose options save to a folder of its own, gone with the guard.
+     fn saving_grid(left: &'static str) -> (Grid, impl Drop) {
+         let dir = std::env::temp_dir().join(format!("pomme-options-{}", uuid::Uuid::new_v4()));
+-        std::fs::create_dir(&dir).unwrap();
++        pomme_dirs::fs::create_dir(&dir).unwrap();
+         let mut grid = Grid::new(left, "Other");
+         grid.menu.settings_dir = dir.clone();
+         let cleanup = scopeguard::guard((), move |_| {
+-            let _ = std::fs::remove_dir_all(&dir);
++            let _ = pomme_dirs::fs::remove_dir_all(&dir);
+         });
+         (grid, cleanup)
+     }
+ 
+     fn saved_settings(grid: &Grid) -> Settings {
+-        let saved = std::fs::read_to_string(grid.menu.settings_dir.join("options.json")).unwrap();
++        let saved = pomme_dirs::fs::read_to_string(grid.menu.settings_dir.join("options.json")).unwrap();
+         serde_json::from_str(&saved).unwrap()
+     }
+ 
+diff --git a/pomme-client/src/ui/menu/servers.rs b/pomme-client/src/ui/menu/servers.rs
+index 324f669..afaa2c0 100644
+--- a/pomme-client/src/ui/menu/servers.rs
++++ b/pomme-client/src/ui/menu/servers.rs
+@@ -278,8 +278,8 @@ impl MainMenu {
+         }
+ 
+         let lan_y = list_top + list_pad + entries_h + list_pad - self.scroll_offset;
+-        let millis = std::time::SystemTime::now()
+-            .duration_since(std::time::UNIX_EPOCH)
++        let millis = web_time::SystemTime::now()
++            .duration_since(web_time::UNIX_EPOCH)
+             .unwrap_or_default()
+             .as_millis();
+         elements.push(MenuElement::Text {
+@@ -1162,7 +1162,7 @@ mod tests {
+     #[test]
+     fn the_direct_connect_address_survives_escape_and_a_restart() {
+         let dir = std::env::temp_dir().join(format!("pomme-last-server-{}", std::process::id()));
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         let mut key_bindings = KeyBindings::default();
+         let mut menu = test_menu(dir.to_str().unwrap(), &mut key_bindings);
+         menu.set_screen(Screen::DirectConnect, &key_bindings);
+@@ -1178,7 +1178,7 @@ mod tests {
+ 
+         let reopened = test_menu(dir.to_str().unwrap(), &mut key_bindings);
+         assert_eq!(reopened.last_mp_ip, "play.example.net");
+-        std::fs::remove_dir_all(&dir).ok();
++        pomme_dirs::fs::remove_dir_all(&dir).ok();
+     }
+ 
+     #[test]
 diff --git a/pomme-client/src/ui/menu/worlds.rs b/pomme-client/src/ui/menu/worlds.rs
-index 98f5d8f..3f9ac6a 100644
+index 98f5d8f..34a550a 100644
 --- a/pomme-client/src/ui/menu/worlds.rs
 +++ b/pomme-client/src/ui/menu/worlds.rs
+@@ -1116,7 +1116,7 @@ impl MainMenu {
+             y,
+             form_w,
+             "Reset Icon",
+-            icon.is_file(),
++            pomme_dirs::fs::is_file(&icon),
+         );
+         y += btn_h + spacing;
+ 
 @@ -1127,9 +1127,10 @@ impl MainMenu {
              y,
              form_w,
@@ -1439,10 +4151,61 @@ index 98f5d8f..3f9ac6a 100644
              let _ = open::that_detached(self.saves_dir.join(&folder));
          }
          y += btn_h + spacing;
+diff --git a/pomme-client/src/ui/recipe_book.rs b/pomme-client/src/ui/recipe_book.rs
+index b0afc9f..3d283c1 100644
+--- a/pomme-client/src/ui/recipe_book.rs
++++ b/pomme-client/src/ui/recipe_book.rs
+@@ -1,5 +1,6 @@
+ use std::collections::{HashMap, HashSet};
+-use std::time::{Duration, Instant};
++use std::time::Duration;
++use web_time::Instant;
+ 
+ use pomme_item::components::{
+     self, Component as ItemComponent, CustomName, Damage, Dye, DyeColor, DyedColor, Enchantments,
+diff --git a/pomme-client/src/ui/server_dialog.rs b/pomme-client/src/ui/server_dialog.rs
+index e6da294..922546f 100644
+--- a/pomme-client/src/ui/server_dialog.rs
++++ b/pomme-client/src/ui/server_dialog.rs
+@@ -1,6 +1,6 @@
+ use std::borrow::Cow;
+ use std::collections::HashMap;
+-use std::time::{Instant, SystemTime, UNIX_EPOCH};
++use web_time::{Instant, SystemTime, UNIX_EPOCH};
+ 
+ use serde_json::Value;
+ use simdnbt::owned::{NbtCompound, NbtTag};
 diff --git a/pomme-client/src/ui/server_list.rs b/pomme-client/src/ui/server_list.rs
-index 1ff0d6e..dba70c9 100644
+index 1ff0d6e..7303e77 100644
 --- a/pomme-client/src/ui/server_list.rs
 +++ b/pomme-client/src/ui/server_list.rs
+@@ -2,7 +2,7 @@ use std::collections::HashMap;
+ use std::path::{Path, PathBuf};
+ use std::sync::Arc;
+ use std::sync::atomic::{AtomicU64, Ordering};
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use parking_lot::RwLock;
+ use serde::{Deserialize, Serialize};
+@@ -68,7 +68,7 @@ pub type PingGeneration = Arc<AtomicU64>;
+ impl ServerList {
+     pub fn load(game_dir: &Path) -> Self {
+         let path = game_dir.join("servers.json");
+-        let servers = std::fs::read_to_string(&path)
++        let servers = pomme_dirs::fs::read_to_string(&path)
+             .ok()
+             .and_then(|s| serde_json::from_str(&s).ok())
+             .unwrap_or_default();
+@@ -79,7 +79,7 @@ impl ServerList {
+         // TODO: use crate::util::write_atomic (vanilla ServerList.save goes
+         // through a temp file + Util.safeReplaceFile).
+         if let Ok(json) = serde_json::to_string_pretty(&self.servers)
+-            && let Err(e) = std::fs::write(&self.path, json)
++            && let Err(e) = pomme_dirs::fs::write(&self.path, json)
+         {
+             tracing::warn!("Failed to save server list: {e}");
+         }
 @@ -113,7 +113,7 @@ impl ServerList {
  }
  
@@ -1452,11 +4215,379 @@ index 1ff0d6e..dba70c9 100644
      servers: &[ServerEntry],
      results: &PingResults,
      generation: &PingGeneration,
+@@ -145,8 +145,8 @@ async fn ping_server(
+             .map_err(|e| format!("{address}: {e}"))?;
+ 
+         let ping_start = Instant::now();
+-        let time = std::time::SystemTime::now()
+-            .duration_since(std::time::UNIX_EPOCH)
++        let time = web_time::SystemTime::now()
++            .duration_since(web_time::UNIX_EPOCH)
+             .unwrap_or_default()
+             .as_millis() as u64;
+ 
+diff --git a/pomme-client/src/ui/sign_edit.rs b/pomme-client/src/ui/sign_edit.rs
+index df74e61..8dcfeee 100644
+--- a/pomme-client/src/ui/sign_edit.rs
++++ b/pomme-client/src/ui/sign_edit.rs
+@@ -1,7 +1,7 @@
+ //! Vanilla `AbstractSignEditScreen`, with `SignEditScreen`'s and
+ //! `HangingSignEditScreen`'s backgrounds.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use winit::keyboard::KeyCode;
+ 
+diff --git a/pomme-client/src/ui/spectator_menu.rs b/pomme-client/src/ui/spectator_menu.rs
+index 39f96e9..e054972 100644
+--- a/pomme-client/src/ui/spectator_menu.rs
++++ b/pomme-client/src/ui/spectator_menu.rs
+@@ -2,7 +2,7 @@
+ //! key opens a transient 9-slot command bar (teleport to player / team) that
+ //! fades out after five seconds.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use pomme_protocol::serverbound::GamePacket;
+ use uuid::Uuid;
+diff --git a/pomme-client/src/ui/subtitles.rs b/pomme-client/src/ui/subtitles.rs
+index 30dc507..17e052d 100644
+--- a/pomme-client/src/ui/subtitles.rs
++++ b/pomme-client/src/ui/subtitles.rs
+@@ -1,6 +1,6 @@
+ //! Sound-cue subtitle overlay (vanilla `SubtitleOverlay`), bottom-right.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use glam::DVec3;
+ 
+diff --git a/pomme-client/src/ui/text_edit.rs b/pomme-client/src/ui/text_edit.rs
+index 63b9a01..b501747 100644
+--- a/pomme-client/src/ui/text_edit.rs
++++ b/pomme-client/src/ui/text_edit.rs
+@@ -6,7 +6,7 @@
+ //! one place UTF-16 semantics survive: it is counted in UTF-16 code units to
+ //! match Java `String.length()`, so an astral char (emoji) costs 2.
+ 
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use winit::keyboard::KeyCode;
+ 
+diff --git a/pomme-client/src/ui/toast.rs b/pomme-client/src/ui/toast.rs
+index b6d6358..5615aee 100644
+--- a/pomme-client/src/ui/toast.rs
++++ b/pomme-client/src/ui/toast.rs
+@@ -3,7 +3,7 @@
+ 
+ use std::cell::OnceCell;
+ use std::collections::HashMap;
+-use std::time::Instant;
++use web_time::Instant;
+ 
+ use crate::renderer::pipelines::menu_overlay::{MenuElement, SpriteId};
+ use crate::ui::chat::wrap_spans;
+diff --git a/pomme-client/src/ui/world_list.rs b/pomme-client/src/ui/world_list.rs
+index 66ed870..6c02c8f 100644
+--- a/pomme-client/src/ui/world_list.rs
++++ b/pomme-client/src/ui/world_list.rs
+@@ -9,7 +9,7 @@
+ //! world rewrites the name and leaves its folder alone.
+ 
+ use std::path::{Path, PathBuf};
+-use std::time::{SystemTime, UNIX_EPOCH};
++use web_time::{SystemTime, UNIX_EPOCH};
+ 
+ use serde::{Deserialize, Serialize};
+ 
+@@ -148,13 +148,13 @@ impl WorldList {
+     /// Reads every save under `saves_dir`, most recently played first.
+     /// Directories without a readable sidecar are skipped.
+     pub fn scan(saves_dir: &Path) -> Self {
+-        let worlds = std::fs::read_dir(saves_dir)
++        let worlds = pomme_dirs::fs::read_dir(saves_dir)
+             .into_iter()
+             .flatten() // a missing saves directory is simply no worlds
+             .filter_map(Result::ok)
+             .filter_map(|entry| {
+                 let folder = entry.file_name().to_str()?.to_owned();
+-                let json = std::fs::read_to_string(entry.path().join(SIDECAR)).ok()?;
++                let json = pomme_dirs::fs::read_to_string(entry.path().join(SIDECAR)).ok()?;
+                 let mut summary: WorldSummary = serde_json::from_str(&json)
+                     .inspect_err(|e| tracing::warn!("Skipping save {folder}: {e}"))
+                     .ok()?;
+@@ -211,7 +211,7 @@ impl WorldList {
+                 stem.truncate(floor_char_boundary(&stem, MAX_FILE_NAME - suffix.len()));
+                 stem + &suffix
+             };
+-            if !self.saves_dir.join(&candidate).exists() {
++            if !pomme_dirs::fs::exists(&self.saves_dir.join(&candidate)) {
+                 return candidate;
+             }
+             count += 1;
+@@ -222,7 +222,7 @@ impl WorldList {
+     /// already come from [`Self::available_folder_name`].
+     pub fn create(&mut self, summary: WorldSummary) -> std::io::Result<PathBuf> {
+         let dir = self.saves_dir.join(&summary.folder);
+-        std::fs::create_dir_all(&dir)?;
++        pomme_dirs::fs::create_dir_all(&dir)?;
+         self.save(&summary)?;
+         self.worlds.push(summary);
+         self.sort();
+@@ -242,7 +242,7 @@ impl WorldList {
+     }
+ 
+     pub fn delete(&mut self, folder: &str) -> std::io::Result<()> {
+-        std::fs::remove_dir_all(self.saves_dir.join(folder))?;
++        pomme_dirs::fs::remove_dir_all(self.saves_dir.join(folder))?;
+         self.worlds.retain(|w| w.folder != folder);
+         Ok(())
+     }
+@@ -262,7 +262,7 @@ impl WorldList {
+     fn save(&self, summary: &WorldSummary) -> std::io::Result<()> {
+         let json = serde_json::to_string_pretty(summary)?;
+         // TODO: use crate::util::write_atomic
+-        std::fs::write(self.saves_dir.join(&summary.folder).join(SIDECAR), json)
++        pomme_dirs::fs::write(self.saves_dir.join(&summary.folder).join(SIDECAR), json)
+     }
+ }
+ 
+@@ -330,7 +330,7 @@ mod tests {
+                     .unwrap()
+                     .as_nanos()
+             ));
+-            std::fs::create_dir_all(&dir).unwrap();
++            pomme_dirs::fs::create_dir_all(&dir).unwrap();
+             Self(dir)
+         }
+     }
+@@ -345,7 +345,7 @@ mod tests {
+ 
+     impl Drop for TempSaves {
+         fn drop(&mut self) {
+-            let _ = std::fs::remove_dir_all(&self.0);
++            let _ = pomme_dirs::fs::remove_dir_all(&self.0);
+         }
+     }
+ 
+@@ -393,9 +393,9 @@ mod tests {
+         let list = WorldList::scan(&dir);
+ 
+         assert_eq!(list.available_folder_name("New World"), "New World");
+-        std::fs::create_dir_all(dir.join("New World")).unwrap();
++        pomme_dirs::fs::create_dir_all(dir.join("New World")).unwrap();
+         assert_eq!(list.available_folder_name("New World"), "New World (1)");
+-        std::fs::create_dir_all(dir.join("New World (1)")).unwrap();
++        pomme_dirs::fs::create_dir_all(dir.join("New World (1)")).unwrap();
+         assert_eq!(list.available_folder_name("New World"), "New World (2)");
+         // An existing counter resumes rather than nesting.
+         assert_eq!(list.available_folder_name("New World (1)"), "New World (2)");
+@@ -460,7 +460,7 @@ mod tests {
+ 
+         list.delete("Doomed").unwrap();
+ 
+-        assert!(!dir.join("Doomed").exists());
++        assert!(!pomme_dirs::fs::exists(&dir.join("Doomed")));
+         assert!(WorldList::scan(&dir).worlds.is_empty());
+     }
+ }
+diff --git a/pomme-client/src/update.rs b/pomme-client/src/update.rs
+index d7a9060..d7bb4e3 100644
+--- a/pomme-client/src/update.rs
++++ b/pomme-client/src/update.rs
+@@ -89,7 +89,7 @@ async fn replace_appimage(bytes: &[u8], path: &Path) -> Result<(), String> {
+     #[cfg(unix)]
+     {
+         use std::os::unix::fs::PermissionsExt;
+-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
++        pomme_dirs::fs::set_permissions(path, pomme_dirs::fs::Permissions::from_mode(0o755))
+             .map_err(|e| format!("{}: {e}", path.display()))?;
+     }
+     Ok(())
+@@ -116,11 +116,11 @@ pub fn clean_up() {
+ }
+ 
+ fn remove_leftovers(dir: &Path) {
+-    let _ = std::fs::remove_dir_all(dir.join(STAGING));
+-    for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
++    let _ = pomme_dirs::fs::remove_dir_all(dir.join(STAGING));
++    for entry in pomme_dirs::fs::read_dir(dir).into_iter().flatten().flatten() {
+         let path = entry.path();
+         if path.extension().is_some_and(|ext| ext == REPLACED) {
+-            let _ = std::fs::remove_file(path);
++            let _ = pomme_dirs::fs::remove_file(path);
+         }
+     }
+ }
+@@ -130,35 +130,35 @@ fn remove_leftovers(dir: &Path) {
+ /// never runs.
+ fn apply(zip: &[u8], dir: &Path) -> Result<(), String> {
+     let staging = dir.join(STAGING);
+-    let _ = std::fs::remove_dir_all(&staging);
++    let _ = pomme_dirs::fs::remove_dir_all(&staging);
+     client::extract_flat(zip, &staging)?;
+     let mut moved = Vec::new();
+     if let Err(e) = move_into_place(&staging, dir, &mut moved) {
+         for target in moved.iter().rev() {
+-            let _ = std::fs::remove_file(target);
+-            let _ = std::fs::rename(replaced(target), target);
++            let _ = pomme_dirs::fs::remove_file(target);
++            let _ = pomme_dirs::fs::rename(replaced(target), target);
+         }
+-        let _ = std::fs::remove_dir_all(&staging);
++        let _ = pomme_dirs::fs::remove_dir_all(&staging);
+         return Err(e);
+     }
+-    let _ = std::fs::remove_dir_all(&staging);
++    let _ = pomme_dirs::fs::remove_dir_all(&staging);
+     Ok(())
+ }
+ 
+ fn move_into_place(staging: &Path, dir: &Path, moved: &mut Vec<PathBuf>) -> Result<(), String> {
+-    let entries = std::fs::read_dir(staging).map_err(|e| format!("{}: {e}", staging.display()))?;
++    let entries = pomme_dirs::fs::read_dir(staging).map_err(|e| format!("{}: {e}", staging.display()))?;
+     for entry in entries {
+         let source = entry.map_err(|e| e.to_string())?.path();
+         let target = dir.join(source.file_name().ok_or("unnamed file")?);
+         let failed = |e: std::io::Error| format!("{}: {e}", target.display());
+-        if target.exists() {
++        if pomme_dirs::fs::exists(&target) {
+             // One the last update couldn't remove, its process still running.
+             let replaced = replaced(&target);
+-            let _ = std::fs::remove_file(&replaced);
+-            std::fs::rename(&target, &replaced).map_err(failed)?;
++            let _ = pomme_dirs::fs::remove_file(&replaced);
++            pomme_dirs::fs::rename(&target, &replaced).map_err(failed)?;
+         }
+         moved.push(target.clone());
+-        std::fs::rename(&source, &target).map_err(failed)?;
++        pomme_dirs::fs::rename(&source, &target).map_err(failed)?;
+     }
+     Ok(())
+ }
+@@ -197,15 +197,15 @@ mod tests {
+ 
+     fn install_dir(label: &str, files: &[(&str, &str)]) -> PathBuf {
+         let dir = crate::test_util::test_temp_dir(label);
+-        std::fs::create_dir_all(&dir).unwrap();
++        pomme_dirs::fs::create_dir_all(&dir).unwrap();
+         for (name, body) in files {
+-            std::fs::write(dir.join(name), body).unwrap();
++            pomme_dirs::fs::write(dir.join(name), body).unwrap();
+         }
+         dir
+     }
+ 
+     fn read(dir: &Path, name: &str) -> String {
+-        std::fs::read_to_string(dir.join(name)).unwrap()
++        pomme_dirs::fs::read_to_string(dir.join(name)).unwrap()
+     }
+ 
+     #[test]
+@@ -221,13 +221,13 @@ mod tests {
+             assert_eq!(read(&dir, name), "new");
+         }
+         assert_eq!(read(&dir, "pomme-client.old"), "old");
+-        assert!(!dir.join(STAGING).exists());
++        assert!(!pomme_dirs::fs::exists(&dir.join(STAGING)));
+ 
+         remove_leftovers(&dir);
+-        assert!(!dir.join("pomme-client.old").exists());
+-        assert!(!dir.join("libopenal.so.old").exists());
++        assert!(!pomme_dirs::fs::exists(&dir.join("pomme-client.old")));
++        assert!(!pomme_dirs::fs::exists(&dir.join("libopenal.so.old")));
+         assert_eq!(read(&dir, "pomme-client"), "new");
+-        std::fs::remove_dir_all(&dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ 
+     #[tokio::test]
+@@ -236,14 +236,14 @@ mod tests {
+         let appimage = dir.join("Pomme.AppImage");
+         replace_appimage(b"new", &appimage).await.unwrap();
+         assert_eq!(read(&dir, "Pomme.AppImage"), "new");
+-        assert!(!dir.join("Pomme.AppImage.part").exists());
++        assert!(!pomme_dirs::fs::exists(&dir.join("Pomme.AppImage.part")));
+         #[cfg(unix)]
+         {
+             use std::os::unix::fs::PermissionsExt;
+-            let mode = std::fs::metadata(&appimage).unwrap().permissions().mode();
++            let mode = pomme_dirs::fs::metadata(&appimage).unwrap().permissions().mode();
+             assert_eq!(mode & 0o777, 0o755);
+         }
+-        std::fs::remove_dir_all(&dir).unwrap();
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ 
+     #[test]
+@@ -253,13 +253,13 @@ mod tests {
+             &[("pomme-client", "old"), ("libopenal.so", "old")],
+         );
+         // Nothing can be renamed onto a folder that isn't empty.
+-        std::fs::create_dir_all(dir.join("libopenal.so.old/busy")).unwrap();
++        pomme_dirs::fs::create_dir_all(dir.join("libopenal.so.old/busy")).unwrap();
+         let zip = release_zip(&[("pomme-client", "new"), ("libopenal.so", "new")]);
+         assert!(apply(&zip, &dir).is_err());
+         assert_eq!(read(&dir, "pomme-client"), "old");
+         assert_eq!(read(&dir, "libopenal.so"), "old");
+-        assert!(!dir.join("pomme-client.old").exists());
+-        assert!(!dir.join(STAGING).exists());
+-        std::fs::remove_dir_all(&dir).unwrap();
++        assert!(!pomme_dirs::fs::exists(&dir.join("pomme-client.old")));
++        assert!(!pomme_dirs::fs::exists(&dir.join(STAGING)));
++        pomme_dirs::fs::remove_dir_all(&dir).unwrap();
+     }
+ }
 diff --git a/pomme-client/src/util.rs b/pomme-client/src/util.rs
-index cd3bb31..afd99e9 100644
+index cd3bb31..d7c6c21 100644
 --- a/pomme-client/src/util.rs
 +++ b/pomme-client/src/util.rs
-@@ -146,13 +146,34 @@ pub fn open_url(url: &str) {
+@@ -1,6 +1,6 @@
+ //! Small shared utilities.
+ 
+-use std::fs;
++use pomme_dirs::fs;
+ use std::io::{self, Write};
+ use std::path::{Path, PathBuf};
+ 
+@@ -38,8 +38,8 @@ impl JavaRandom {
+     /// A time-seeded instance, for vanilla's unseeded `RandomSource.create()`
+     /// uses where the exact sequence doesn't matter.
+     pub fn from_time() -> Self {
+-        let nanos = std::time::SystemTime::now()
+-            .duration_since(std::time::UNIX_EPOCH)
++        let nanos = web_time::SystemTime::now()
++            .duration_since(web_time::UNIX_EPOCH)
+             .map(|d| d.subsec_nanos() as i64 + d.as_secs() as i64)
+             .unwrap_or(0);
+         Self::new(nanos)
+@@ -90,6 +90,10 @@ impl JavaRandom {
+ /// that waits on the disk: cold file opens wait on it and the virus scanner,
+ /// not the CPU.
+ pub fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
++    // A page has the one thread.
++    if cfg!(target_arch = "wasm32") {
++        return items.iter().map(f).collect();
++    }
+     let threads = std::thread::available_parallelism().map_or(4, |n| n.get().min(16));
+     let chunk = items.len().div_ceil(threads).max(1);
+     let f = &f;
+@@ -114,7 +118,11 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
+     // Per-process name so two clients on one game dir don't truncate each
+     // other's in-flight temp file.
+     let mut tmp = target.as_os_str().to_owned();
++    // A page is its own process, with no id to ask for.
++    #[cfg(not(target_arch = "wasm32"))]
+     tmp.push(format!(".{}.tmp", std::process::id()));
++    #[cfg(target_arch = "wasm32")]
++    tmp.push(".web.tmp");
+     let tmp = PathBuf::from(tmp);
+     let result = fs::File::create(&tmp)
+         .and_then(|mut file| file.write_all(bytes))
+@@ -146,20 +154,41 @@ pub fn open_url(url: &str) {
      let opened = open_url_android(url).map_err(|e| e.to_string());
      #[cfg(target_os = "ios")]
      let opened = open_url_ios(url);
@@ -1492,11 +4623,294 @@ index cd3bb31..afd99e9 100644
  /// Keeps `dir`, which holds only re-downloadable files, out of iCloud
  /// backups; it's created if missing.
  #[cfg(target_os = "ios")]
+ pub fn exclude_from_backup(dir: &std::path::Path) {
+     use objc2_foundation::{NSNumber, NSString, NSURL, NSURLIsExcludedFromBackupKey};
+ 
+-    let _ = std::fs::create_dir_all(dir);
++    let _ = pomme_dirs::fs::create_dir_all(dir);
+     let url = NSURL::fileURLWithPath(&NSString::from_str(&dir.to_string_lossy()));
+     // SAFETY: the key's value is an `NSNumber` boolean, as Foundation expects.
+     let excluded = unsafe {
+diff --git a/pomme-client/src/world/block/json_bundle.rs b/pomme-client/src/world/block/json_bundle.rs
+index 842ce9e..1bd90c9 100644
+--- a/pomme-client/src/world/block/json_bundle.rs
++++ b/pomme-client/src/world/block/json_bundle.rs
+@@ -133,16 +133,16 @@ mod tests {
+     #[test]
+     fn bundle_holds_blockstates_models_and_items_by_key() {
+         let root = std::env::temp_dir().join(format!("pomme-json-bundle-{}", std::process::id()));
+-        let _ = std::fs::remove_dir_all(&root);
++        let _ = pomme_dirs::fs::remove_dir_all(&root);
+         let mc = root.join("assets/minecraft");
+         for dir in ["blockstates", "models/block", "items"] {
+-            std::fs::create_dir_all(mc.join(dir)).unwrap();
++            pomme_dirs::fs::create_dir_all(mc.join(dir)).unwrap();
+         }
+-        std::fs::write(mc.join("blockstates/stone.json"), "{\"variants\":{}}").unwrap();
+-        std::fs::write(mc.join("blockstates/dirt.json"), "{}").unwrap();
+-        std::fs::write(mc.join("blockstates/notes.txt"), "x").unwrap();
+-        std::fs::write(mc.join("models/block/stone.json"), "{\"parent\":\"a\"}").unwrap();
+-        std::fs::write(mc.join("items/stone.json"), "{\"model\":{}}").unwrap();
++        pomme_dirs::fs::write(mc.join("blockstates/stone.json"), "{\"variants\":{}}").unwrap();
++        pomme_dirs::fs::write(mc.join("blockstates/dirt.json"), "{}").unwrap();
++        pomme_dirs::fs::write(mc.join("blockstates/notes.txt"), "x").unwrap();
++        pomme_dirs::fs::write(mc.join("models/block/stone.json"), "{\"parent\":\"a\"}").unwrap();
++        pomme_dirs::fs::write(mc.join("items/stone.json"), "{\"model\":{}}").unwrap();
+ 
+         let cache = root.join("cache");
+         let resources = crate::test_util::test_resources(std::slice::from_ref(&root));
+@@ -165,13 +165,13 @@ mod tests {
+         );
+ 
+         // A second load reads the cached file, not the assets.
+-        std::fs::remove_dir_all(&mc).unwrap();
++        pomme_dirs::fs::remove_dir_all(&mc).unwrap();
+         let cached = JsonBundle::load(&inputs, Some(&cache), None);
+         assert_eq!(cached.blockstates().len(), 2);
+         assert_eq!(
+             cached.get("minecraft/models/block/stone.json"),
+             Some("{\"parent\":\"a\"}")
+         );
+-        let _ = std::fs::remove_dir_all(&root);
++        let _ = pomme_dirs::fs::remove_dir_all(&root);
+     }
+ }
+diff --git a/pomme-client/src/world/block/model.rs b/pomme-client/src/world/block/model.rs
+index 1f8845e..983756d 100644
+--- a/pomme-client/src/world/block/model.rs
++++ b/pomme-client/src/world/block/model.rs
+@@ -3314,14 +3314,14 @@ mod tests {
+         let jar = root.join("jar/assets");
+         let items = jar.join("minecraft/items");
+         let models = jar.join("minecraft/models/item");
+-        std::fs::create_dir_all(&items).unwrap();
+-        std::fs::create_dir_all(&models).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::create_dir_all(&items).unwrap();
++        pomme_dirs::fs::create_dir_all(&models).unwrap();
++        pomme_dirs::fs::write(
+             items.join("holey.json"),
+             r#"{"model":{"type":"minecraft:model","model":"minecraft:item/holey"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             models.join("holey.json"),
+             r#"{
+                 "parent":"minecraft:item/generated",
+@@ -3332,12 +3332,12 @@ mod tests {
+             }"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             items.join("unresolved.json"),
+             r#"{"model":{"type":"minecraft:model","model":"minecraft:item/unresolved"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             models.join("unresolved.json"),
+             r##"{
+                 "parent":"minecraft:item/generated",
+@@ -3349,7 +3349,7 @@ mod tests {
+             }"##,
+         )
+         .unwrap();
+-        std::fs::write(models.join("generated.json"), r#"{}"#).unwrap();
++        pomme_dirs::fs::write(models.join("generated.json"), r#"{}"#).unwrap();
+ 
+         let resources = crate::test_util::test_resources(&[root.join("jar")]);
+         let inputs = ModelInputs::prepare(&resources).unwrap();
+@@ -3374,20 +3374,20 @@ mod tests {
+             )
+         );
+ 
+-        std::fs::remove_dir_all(root).unwrap();
++        pomme_dirs::fs::remove_dir_all(root).unwrap();
+     }
+ 
+     #[test]
+     fn resolved_model_inherits_gui_transform() {
+         let root = test_temp_dir("item_gui_transform");
+         let models = root.join("assets/minecraft/models/block");
+-        std::fs::create_dir_all(&models).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::create_dir_all(&models).unwrap();
++        pomme_dirs::fs::write(
+             models.join("child.json"),
+             r#"{"parent":"minecraft:block/parent"}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             models.join("parent.json"),
+             r#"{"gui_light":"front","display":{"gui":{"rotation":[30,135,0],"scale":[0.625,0.625,0.625]}}}"#,
+         )
+@@ -3400,7 +3400,7 @@ mod tests {
+         assert_eq!(resolved.gui_transform, gui_transform(135.0));
+         assert_eq!(resolved.gui_light, GuiLight::Front);
+ 
+-        std::fs::remove_dir_all(root).unwrap();
++        pomme_dirs::fs::remove_dir_all(root).unwrap();
+     }
+ 
+     #[test]
+@@ -3412,42 +3412,42 @@ mod tests {
+         let models = jar.join("minecraft/models/item");
+         let pack_items = instance.join("resourcepacks/test_pack/assets/minecraft/items");
+         let pack_models = instance.join("resourcepacks/test_pack/assets/other/models/item");
+-        std::fs::create_dir_all(&items).unwrap();
+-        std::fs::create_dir_all(&models).unwrap();
+-        std::fs::create_dir_all(&pack_items).unwrap();
+-        std::fs::create_dir_all(&pack_models).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::create_dir_all(&items).unwrap();
++        pomme_dirs::fs::create_dir_all(&models).unwrap();
++        pomme_dirs::fs::create_dir_all(&pack_items).unwrap();
++        pomme_dirs::fs::create_dir_all(&pack_models).unwrap();
++        pomme_dirs::fs::write(
+             instance.join("resourcepacks/test_pack/pack.mcmeta"),
+             r#"{"pack":{"pack_format":84,"description":"test"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             items.join("test_item.json"),
+             r#"{"model":{"type":"minecraft:model","model":"minecraft:item/base"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             models.join("base.json"),
+             r#"{"parent":"minecraft:item/generated","textures":{"layer0":"minecraft:item/base"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             models.join("generated.json"),
+             r#"{"display":{"ground":{"translation":[0,2,0],"scale":[0.5,0.5,0.5]}}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             pack_items.join("test_item.json"),
+             r#"{"model":{"type":"minecraft:model","model":"other:item/replacement"}}"#,
+         )
+         .unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             pack_models.join("replacement.json"),
+             r#"{"parent":"minecraft:item/generated","textures":{"layer0":"other:item/replacement"},"display":{"gui":{"translation":[32,-96,0],"scale":[8,-8,1]}}}"#,
+         )
+         .unwrap();
+         // An item the jar does not define at all.
+-        std::fs::write(
++        pomme_dirs::fs::write(
+             pack_items.join("pack_only.json"),
+             r#"{"model":{"type":"minecraft:model","model":"other:item/replacement"}}"#,
+         )
+@@ -3479,15 +3479,15 @@ mod tests {
+         let origin = transform.transform_point3(Vec3::ZERO);
+         assert!((origin - Vec3::new(0.0, 2.0 / 16.0, 0.0)).length() < 1.0e-6);
+ 
+-        std::fs::remove_dir_all(root).unwrap();
++        pomme_dirs::fs::remove_dir_all(root).unwrap();
+     }
+ 
+     #[test]
+     fn bare_face_texture_slot_matches_vanilla_texture_slots() {
+         let root = test_temp_dir("bare_texture_slot");
+         let models = root.join("assets/minecraft/models/block");
+-        std::fs::create_dir_all(&models).unwrap();
+-        std::fs::write(
++        pomme_dirs::fs::create_dir_all(&models).unwrap();
++        pomme_dirs::fs::write(
+             models.join("test_core.json"),
+             r#"{
+                 "textures":{"all":"block/test_core"},
+@@ -3516,7 +3516,7 @@ mod tests {
+                 .all(|quad| quad.texture.name() == "test_core")
+         );
+ 
+-        std::fs::remove_dir_all(root).unwrap();
++        pomme_dirs::fs::remove_dir_all(root).unwrap();
+     }
+ 
+     #[test]
+diff --git a/pomme-client/src/world/block/render_assets.rs b/pomme-client/src/world/block/render_assets.rs
+index 2c76487..47e04d0 100644
+--- a/pomme-client/src/world/block/render_assets.rs
++++ b/pomme-client/src/world/block/render_assets.rs
+@@ -708,14 +708,14 @@ fn constraints_match<'a>(
+ }
+ 
+ pub(super) fn load_cache<T: serde::de::DeserializeOwned>(path: &Path) -> Option<T> {
+-    let data = std::fs::read(path).ok()?;
++    let data = pomme_dirs::fs::read(path).ok()?;
+     serde_json::from_slice(&data).ok()
+ }
+ 
+ /// Atomic, since every client of a version shares the one cache.
+ pub(super) fn save_cache<T: Serialize>(path: &Path, value: &T) {
+     if let Some(dir) = path.parent() {
+-        let _ = std::fs::create_dir_all(dir);
++        let _ = pomme_dirs::fs::create_dir_all(dir);
+     }
+     if let Ok(json) = serde_json::to_vec(value)
+         && let Err(e) = crate::util::write_atomic(path, &json)
+diff --git a/pomme-client/src/world/light/worker.rs b/pomme-client/src/world/light/worker.rs
+index 693f026..073da5b 100644
+--- a/pomme-client/src/world/light/worker.rs
++++ b/pomme-client/src/world/light/worker.rs
+@@ -243,9 +243,12 @@ impl LightWorker {
+         while let Some(report) = crate::util::try_recv_live(&self.rx, THREAD_GONE) {
+             apply(self, report);
+         }
+-        let deadline = std::time::Instant::now() + EDIT_WAIT;
++        let deadline = web_time::Instant::now() + EDIT_WAIT;
+         while self.awaited.is_some() {
+-            match self.rx.recv_deadline(deadline) {
++            match self
++                .rx
++                .recv_timeout(deadline.saturating_duration_since(web_time::Instant::now()))
++            {
+                 Ok(report) => apply(self, report),
+                 // Behind a join's chunks the light is frames away, and waiting
+                 // again would stall every one of them.
+diff --git a/pomme-dirs/Cargo.toml b/pomme-dirs/Cargo.toml
+index 67447d8..cdf6207 100644
+--- a/pomme-dirs/Cargo.toml
++++ b/pomme-dirs/Cargo.toml
+@@ -8,3 +8,6 @@ license = "GPL-3.0-or-later"
+ [dependencies]
+ directories = { workspace = true }
+ serde_json = { workspace = true }
++
++[target.'cfg(target_arch = "wasm32")'.dependencies]
++web-time = "1.1"
+diff --git a/pomme-dirs/src/lib.rs b/pomme-dirs/src/lib.rs
+index 4e53304..9894187 100644
+--- a/pomme-dirs/src/lib.rs
++++ b/pomme-dirs/src/lib.rs
+@@ -11,9 +11,11 @@
+ //!   launcher/             left by the old launcher
+ //! ```
+ 
++pub mod fs;
++
++use std::io;
+ use std::path::{Path, PathBuf};
+ use std::sync::OnceLock;
+-use std::{fs, io};
+ 
+ /// Made with every profile, so mods and packs have a home before anything
+ /// reads them.
 diff --git a/pomme-install/Cargo.toml b/pomme-install/Cargo.toml
-index 03e3ac8..5a86fde 100644
+index 03e3ac8..48afedf 100644
 --- a/pomme-install/Cargo.toml
 +++ b/pomme-install/Cargo.toml
-@@ -7,10 +7,20 @@ license = "GPL-3.0-or-later"
+@@ -7,10 +7,21 @@ license = "GPL-3.0-or-later"
  publish = false
  
  [dependencies]
@@ -1511,6 +4925,7 @@ index 03e3ac8..5a86fde 100644
 +tokio = { workspace = true, features = ["macros", "rt", "time"] }
  zip = { workspace = true }
 +web-time = "1"
++pomme-dirs = { path = "../pomme-dirs" }
 +
 +[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 +tokio = { workspace = true, features = ["fs", "rt-multi-thread"] }
@@ -1549,7 +4964,7 @@ index 32e7cec..f7820d4 100644
              done: bytes.len() as u32,
              total,
 diff --git a/pomme-install/src/lib.rs b/pomme-install/src/lib.rs
-index ac1e710..5293270 100644
+index ac1e710..65ccf27 100644
 --- a/pomme-install/src/lib.rs
 +++ b/pomme-install/src/lib.rs
 @@ -9,12 +9,16 @@
@@ -1578,7 +4993,35 @@ index ac1e710..5293270 100644
  const USER_AGENT: &str = "pomme";
  
  /// How far an install has got: `done` of `total` steps, with what's happening.
-@@ -163,7 +168,11 @@ pub async fn install(
+@@ -106,7 +111,7 @@ const EXTRACTED_MARKER: &str = ".extracted";
+ /// isn't kept to redo it from; its pack format reads as unknown instead.
+ fn is_extracted(versions_dir: &Path, version: &str) -> bool {
+     let dir = extracted_dir(versions_dir, version);
+-    dir.join(EXTRACTED_MARKER).exists() && dir.join("assets").is_dir()
++    pomme_dirs::fs::exists(dir.join(EXTRACTED_MARKER)) && pomme_dirs::fs::is_dir(dir.join("assets"))
+ }
+ 
+ /// The version's index and its jar's extraction are in place. Each is
+@@ -114,7 +119,7 @@ fn is_extracted(versions_dir: &Path, version: &str) -> bool {
+ /// marker; older launchers extracted in place and wrote the marker last, so
+ /// one without it may be half done.
+ pub fn is_installed(assets_dir: &Path, versions_dir: &Path, version: &str) -> bool {
+-    index_path(assets_dir, version).exists() && is_extracted(versions_dir, version)
++    pomme_dirs::fs::exists(index_path(assets_dir, version)) && is_extracted(versions_dir, version)
+ }
+ 
+ /// Downloads whatever of `version` is missing or damaged, reporting through
+@@ -158,12 +163,21 @@ pub async fn install(
+             hash: Hash::Sha1,
+         })
+         .collect();
++    // The browser fetches each object when it's first read
++    // (`web::fetch_object`) rather than all of them, mostly sounds, up front.
++    #[cfg(not(target_arch = "wasm32"))]
+     download_all(http, objects, &report).await?;
++    #[cfg(target_arch = "wasm32")]
++    drop::<Vec<Fetch>>(objects);
+     // After the objects, so an index on disk means they're all there.
      write_atomic(&index_path(assets_dir, version), &index_bytes).await?;
  
      let out = extracted_dir(versions_dir, version);
@@ -1591,7 +5034,7 @@ index ac1e710..5293270 100644
          report(0, 1, "Downloading the client jar...");
          let client = &version_json.downloads.client;
          let jar = fetch_verified(http, &client.url, &client.sha1, Hash::Sha1).await?;
-@@ -177,6 +186,7 @@ pub async fn install(
+@@ -177,6 +191,7 @@ pub async fn install(
                  &format!("Extracting the client jar ({done}/{total})"),
              )
          };
@@ -1599,7 +5042,7 @@ index ac1e710..5293270 100644
          tokio::task::block_in_place(|| {
              let _ = std::fs::remove_dir_all(&part);
              extract_assets(&jar, &part, &extract_report)?;
-@@ -186,6 +196,12 @@ pub async fn install(
+@@ -186,6 +201,12 @@ pub async fn install(
              let _ = std::fs::remove_dir_all(&out);
              std::fs::rename(&part, &out).map_err(|e| format!("{}: {e}", out.display()))
          })?;
@@ -1612,7 +5055,7 @@ index ac1e710..5293270 100644
      }
      Ok(())
  }
-@@ -237,35 +253,40 @@ pub(crate) async fn download_all(
+@@ -237,35 +258,40 @@ pub(crate) async fn download_all(
      files: Vec<Fetch>,
      report: &(dyn Fn(u32, u32, &str) + Send + Sync),
  ) -> Result<(), String> {
@@ -1671,7 +5114,7 @@ index ac1e710..5293270 100644
          if last_report.elapsed() >= PROGRESS_INTERVAL {
              let done_mb = done_bytes as f64 / 1048576.0;
              report(
-@@ -292,9 +313,11 @@ pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
+@@ -292,9 +318,11 @@ pub(crate) async fn get_json<T: serde::de::DeserializeOwned>(
  }
  
  pub(crate) async fn get(http: &reqwest::Client, url: &str) -> Result<reqwest::Response, String> {
@@ -1686,7 +5129,7 @@ index ac1e710..5293270 100644
          .await
          .and_then(reqwest::Response::error_for_status)
          .map_err(|e| e.to_string())
-@@ -331,7 +354,11 @@ where
+@@ -331,7 +359,11 @@ where
      let mut last_error = String::new();
      for n in 0..ATTEMPTS {
          if n > 0 {
@@ -1699,7 +5142,7 @@ index ac1e710..5293270 100644
          }
          match attempt().await {
              Ok(value) => return Ok(value),
-@@ -342,6 +369,7 @@ where
+@@ -342,6 +374,7 @@ where
  }
  
  /// Writes `bytes` beside `path`, then renames it into place.
@@ -1707,7 +5150,7 @@ index ac1e710..5293270 100644
  pub async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
      if let Some(dir) = path.parent() {
          tokio::fs::create_dir_all(dir)
-@@ -358,8 +386,48 @@ pub async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
+@@ -358,8 +391,48 @@ pub async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
          .map_err(|e| format!("{}: {e}", path.display()))
  }
  

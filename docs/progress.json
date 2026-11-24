@@ -5,47 +5,171 @@
     {
       "name": "Graphics (WebGPU)",
       "items": [
-        {"name": "Shaders", "total": 74, "done": 74},
-        {"name": "Render pass", "total": 15, "done": 0},
-        {"name": "Commands", "total": 15, "done": 0},
-        {"name": "Swapchain", "total": 13, "done": 0},
-        {"name": "Buffers", "total": 12, "done": 0},
-        {"name": "Device", "total": 9, "done": 0},
-        {"name": "Frames", "total": 9, "done": 0},
-        {"name": "Bind groups", "total": 6, "done": 0},
-        {"name": "Pipelines", "total": 6, "done": 0},
-        {"name": "Textures", "total": 6, "done": 0},
-        {"name": "GPU timers", "total": 5, "done": 0},
-        {"name": "Context", "total": 3, "done": 0},
-        {"name": "Samplers", "total": 2, "done": 0}
+        {
+          "name": "Shaders",
+          "total": 74,
+          "done": 74
+        },
+        {
+          "name": "Render pass",
+          "total": 15,
+          "done": 15
+        },
+        {
+          "name": "Commands",
+          "total": 15,
+          "done": 13
+        },
+        {
+          "name": "Swapchain",
+          "total": 13,
+          "done": 13
+        },
+        {
+          "name": "Buffers",
+          "total": 12,
+          "done": 12
+        },
+        {
+          "name": "Device",
+          "total": 9,
+          "done": 9
+        },
+        {
+          "name": "Frames",
+          "total": 9,
+          "done": 9
+        },
+        {
+          "name": "Bind groups",
+          "total": 6,
+          "done": 6
+        },
+        {
+          "name": "Pipelines",
+          "total": 6,
+          "done": 6
+        },
+        {
+          "name": "Textures",
+          "total": 6,
+          "done": 6
+        },
+        {
+          "name": "GPU timers",
+          "total": 5,
+          "done": 0
+        },
+        {
+          "name": "Context",
+          "total": 3,
+          "done": 3
+        },
+        {
+          "name": "Samplers",
+          "total": 2,
+          "done": 2
+        }
       ]
     },
     {
       "name": "Platform",
       "items": [
-        {"name": "Server connection", "total": 4, "done": 4},
-        {"name": "Audio", "total": 4, "done": 3},
-        {"name": "Game files", "total": 4, "done": 1},
-        {"name": "Installer", "total": 4, "done": 2},
-        {"name": "Threads", "total": 4, "done": 0},
-        {"name": "Task runtime", "total": 3, "done": 3},
-        {"name": "Accounts", "total": 3, "done": 0},
-        {"name": "Logging", "total": 2, "done": 2},
-        {"name": "Entry point", "total": 2, "done": 0},
-        {"name": "Clock", "total": 1, "done": 0},
-        {"name": "Clipboard", "total": 1, "done": 0},
-        {"name": "Discord", "total": 1, "done": 1}
+        {
+          "name": "Server connection",
+          "total": 4,
+          "done": 4
+        },
+        {
+          "name": "Audio",
+          "total": 4,
+          "done": 3
+        },
+        {
+          "name": "Game files",
+          "total": 4,
+          "done": 4
+        },
+        {
+          "name": "Installer",
+          "total": 4,
+          "done": 2
+        },
+        {
+          "name": "Threads",
+          "total": 4,
+          "done": 1
+        },
+        {
+          "name": "Task runtime",
+          "total": 3,
+          "done": 3
+        },
+        {
+          "name": "Accounts",
+          "total": 3,
+          "done": 0
+        },
+        {
+          "name": "Logging",
+          "total": 2,
+          "done": 2
+        },
+        {
+          "name": "Entry point",
+          "total": 2,
+          "done": 2
+        },
+        {
+          "name": "Clock",
+          "total": 1,
+          "done": 1
+        },
+        {
+          "name": "Clipboard",
+          "total": 1,
+          "done": 0
+        },
+        {
+          "name": "Discord",
+          "total": 1,
+          "done": 1
+        }
       ]
     },
     {
       "name": "Game",
       "items": [
-        {"name": "Loading screen", "total": 1, "done": 0},
-        {"name": "Title menu", "total": 1, "done": 0},
-        {"name": "Server list", "total": 1, "done": 0},
-        {"name": "Joining a server", "total": 1, "done": 0},
-        {"name": "World rendering", "total": 1, "done": 0},
-        {"name": "Singleplayer", "total": 1, "done": 0}
+        {
+          "name": "Loading screen",
+          "total": 1,
+          "done": 1
+        },
+        {
+          "name": "Title menu",
+          "total": 1,
+          "done": 1
+        },
+        {
+          "name": "Server list",
+          "total": 1,
+          "done": 0
+        },
+        {
+          "name": "Joining a server",
+          "total": 1,
+          "done": 0
+        },
+        {
+          "name": "World rendering",
+          "total": 1,
+          "done": 0
+        },
+        {
+          "name": "Singleplayer",
+          "total": 1,
+          "done": 0
+        }
       ]
     }
   ]

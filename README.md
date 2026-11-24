@@ -7,7 +7,7 @@
 ![WebGPU](https://img.shields.io/badge/graphics-WebGPU-005A9C?style=flat-square)
 ![WebAssembly](https://img.shields.io/badge/runs%20on-WebAssembly-654FF0?style=flat-square&logo=webassembly&logoColor=white)
 ![Rust](https://img.shields.io/badge/written%20in-Rust-B7410E?style=flat-square&logo=rust&logoColor=white)
-![Status](https://img.shields.io/badge/status-in%20progress-d29922?style=flat-square)
+![Status](https://img.shields.io/badge/status-title%20menu%20runs-2ea043?style=flat-square)
 ![License](https://img.shields.io/badge/license-GPL--3.0-2ea043?style=flat-square)
 
 </div>
@@ -17,9 +17,21 @@
 ![Port progress](docs/progress.svg)
 
 > [!NOTE]
-> **The game doesn't run in a browser yet.** Shaders, server connections,
-> audio and the task runtime are ported. The WebGPU graphics backend is being
-> written now; the loading screen and title menu are the first milestone.
+> **The title menu runs in the browser.** Pomme's own renderer draws it in
+> Chrome through WebGPU, from game files the page downloads and keeps.
+> Joining servers and drawing the world come next.
+
+## Screenshots
+
+<table>
+<tr>
+<td><img src="docs/screenshots/loading-install.png" alt="First-run loading screen"></td>
+<td><img src="docs/screenshots/loading-mojang.png" alt="Loading screen"></td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/screenshots/title-menu.png" alt="Title menu in Chrome"></td>
+</tr>
+</table>
 
 ## Roadmap
 
@@ -27,9 +39,9 @@
 - [x] Server connections through `pomme-relay` over WebSocket
 - [x] Web Audio playback
 - [x] Browser task runtime and console logging
-- [ ] WebGPU graphics backend
-- [ ] Browser entry point and game files loaded over the network
-- [ ] **Milestone 1:** loading screen and title menu
+- [x] WebGPU graphics backend
+- [x] Browser entry point and game files loaded over the network
+- [x] **Milestone 1:** loading screen and title menu
 - [ ] Server list and joining a server
 - [ ] **Milestone 2:** world rendering and gameplay
 - [ ] Microsoft account sign-in

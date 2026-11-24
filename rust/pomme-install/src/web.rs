@@ -41,12 +41,23 @@ pub(super) async fn exists(path: &Path) -> Result<bool, String> {
     Ok(value.as_bool().unwrap_or(false))
 }
 
+/// Stores `bytes` at `path`, and puts them in the game's file tree too
+/// unless they're an asset object: those, mostly sounds, load when first
+/// read.
 pub(super) async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let path = path.to_string_lossy();
-    JsFuture::from(write(&path, &Uint8Array::from(bytes)).map_err(reason)?)
+    let key = path.to_string_lossy();
+    JsFuture::from(write(&key, &Uint8Array::from(bytes)).map_err(reason)?)
         .await
         .map_err(reason)?;
+    if !is_object(&key) {
+        pomme_dirs::fs::preload(path, bytes.to_vec());
+    }
     Ok(())
+}
+
+/// Whether a stored path is one of the asset index's objects.
+pub fn is_object(path: &str) -> bool {
+    path.contains("/assets/objects/")
 }
 
 pub(super) async fn sleep(time: std::time::Duration) {
@@ -70,4 +81,21 @@ pub(super) fn relay_url(url: &str) -> Result<String, String> {
         .ok_or("Missing browser origin")?;
     let query = url.query().map(|query| format!("?{query}")).unwrap_or_default();
     Ok(format!("{origin}/relay/{host}{}{query}", url.path()))
+}
+
+/// An asset object at `path` (`.../objects/<xx>/<sha1>`): from the store, or
+/// downloaded, checked and stored when it isn't there yet.
+pub async fn fetch_object(http: &reqwest::Client, path: &Path) -> Result<Vec<u8>, String> {
+    if let Some(bytes) = read_asset(path).await? {
+        return Ok(bytes);
+    }
+    let hash = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .filter(|h| h.len() == 40)
+        .ok_or_else(|| format!("{}: not an asset object", path.display()))?;
+    let url = format!("{}/{}/{hash}", super::RESOURCES_BASE_URL, &hash[..2]);
+    let bytes = super::fetch_verified(http, &url, hash, super::Hash::Sha1).await?;
+    write_atomic(path, &bytes).await?;
+    Ok(bytes)
 }
