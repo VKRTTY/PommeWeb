@@ -38,6 +38,32 @@ fn horizontal_input(input: &InputState, yaw_rad: f32) -> Option<(f64, f64)> {
     Some((x / len, z / len))
 }
 
+/// The on-ground flag of the movement packet about to be sent: Meteor's
+/// No Fall rewrites it (`NoFall.onSendPacket`). NoGround always says airborne;
+/// Packet says grounded once falling faster than half a block a tick, or
+/// always while Flight is on, so the server sees no fall damage. Creative
+/// players and a mace in hand (`pause-on-mace`) are left alone. The Place
+/// and AirPlace modes, which place blocks, aren't ported.
+pub fn move_on_ground(meteor: &MeteorClient, game: &GameState) -> bool {
+    let real = game.player.on_ground;
+    if !meteor.is_active("no-fall") || game.player.game_mode == 1 {
+        return real;
+    }
+    match meteor.get("no-fall", "mode").as_str() {
+        Some("NoGround") => false,
+        Some("Packet") => {
+            if meteor.is_active("flight") {
+                return true;
+            }
+            if game.player.velocity.y > -0.5 {
+                return real;
+            }
+            true
+        }
+        _ => real,
+    }
+}
+
 pub fn tick(meteor: &mut MeteorClient, input: &InputState, game: &mut GameState, sender: &PacketSender) {
     meteor.memory.ticks += 1;
     let ticks = meteor.memory.ticks;

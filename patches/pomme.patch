@@ -457,7 +457,7 @@ index ad6b7c1..3f77bd0 100644
  pub fn forget(store: &dyn SecretStore, uuid: &uuid::Uuid) {
      if let Some(account) = pomme_auth::get_all_accounts(store)
 diff --git a/pomme-client/src/app/core.rs b/pomme-client/src/app/core.rs
-index cfadfa1..d92288b 100644
+index cfadfa1..6f2b93b 100644
 --- a/pomme-client/src/app/core.rs
 +++ b/pomme-client/src/app/core.rs
 @@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
@@ -570,6 +570,15 @@ index cfadfa1..d92288b 100644
          let dx = game.player.position.x - game.player.prev_position.x;
          let dz = game.player.position.z - game.player.prev_position.z;
          crate::entity::update_walk_animation(
+@@ -4483,7 +4489,7 @@ impl AppCore {
+             || (look_dir.x_rot_deg() - game.last_sent_look_dir.x_rot_deg()) != 0.0;
+ 
+         let flags = MoveFlags {
+-            on_ground: game.player.on_ground,
++            on_ground: crate::meteor::modules::move_on_ground(&self.meteor, game),
+             horizontal_collision: game.player.horizontal_collision,
+         };
+ 
 diff --git a/pomme-client/src/app/input/mod.rs b/pomme-client/src/app/input/mod.rs
 index 2073c61..dc9915e 100644
 --- a/pomme-client/src/app/input/mod.rs

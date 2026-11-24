@@ -160,15 +160,6 @@ pub fn tick(meteor: &mut MeteorClient, input: &InputState, game: &mut GameState)
     if meteor.is_active("high-jump") && jump && player.on_ground {
         player.velocity.y += meteor.get_f64("high-jump", "multiplier") * 0.1;
     }
-
-    // NoFall, Packet and Place-free modes: no fall damage by clearing the
-    // distance fallen, which the server judges.
-    if meteor.is_active("no-fall") && !player.flying {
-        let mode = meteor.get("no-fall", "mode");
-        if mode.as_str() != Some("Place") {
-            player.fall_distance = 0.0;
-        }
-    }
 }
 
 /// `Zoom`: the scroll wheel changes the zoom, and the view eases in and out
