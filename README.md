@@ -31,6 +31,13 @@
 <tr>
 <td colspan="2"><img src="docs/screenshots/title-menu.png" alt="Title menu in Chrome"></td>
 </tr>
+<tr>
+<td><img src="docs/screenshots/menu-03-multiplayer.png" alt="Multiplayer screen"></td>
+<td><img src="docs/screenshots/menu-04-options.png" alt="Options screen"></td>
+</tr>
+<tr>
+<td colspan="2"><img src="docs/screenshots/menu-02-singleplayer.png" alt="Create New World screen"></td>
+</tr>
 </table>
 
 ## Roadmap

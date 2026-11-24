@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Pomme</title>
+<script src="./early.js"></script>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #ef323d; overflow: hidden; }
   canvas { display: block; width: 100vw; height: 100vh; outline: none; }
   /* Vanilla's LoadingOverlay: the logo is centered, as wide as the smaller
      of 75% of the width and the height; the bar is as wide, at 83.25% of
@@ -21,7 +22,7 @@
     transform: translate(-50%, -50%); display: flex;
   }
   /* The texture holds the wordmark's left half above its right half. */
-  #logo div { flex: 1; background-size: 100% 200%; background-repeat: no-repeat; }
+  #logo div { flex: 1; background-image: var(--logo, none); background-size: 100% 200%; background-repeat: no-repeat; }
   #logo div + div { background-position: 0 100%; }
   /* LoadingOverlay.drawProgressBar: 10 units tall, a one-unit outline, the
      fill one unit inside it. */

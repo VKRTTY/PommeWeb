@@ -59,6 +59,50 @@ impl<T> Job<T> {
     }
 }
 
+/// A worker thread on desktop. The browser has no threads to spare, so there
+/// the worker's state stays on the game's thread and does what's queued for
+/// it whenever the game reads its results ([`Pump::run`]).
+#[derive(Default)]
+pub struct Pump(#[cfg(target_arch = "wasm32")] Option<std::cell::RefCell<Box<dyn FnMut()>>>);
+
+impl Pump {
+    /// Runs `thread(state)` on a thread named `name`; in the browser keeps
+    /// `state` for `here` to work on each time the worker is pumped.
+    pub fn spawn<S: Send + 'static>(
+        name: &str,
+        state: S,
+        thread: fn(S),
+        here: fn(&mut S),
+    ) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let _ = here;
+            std::thread::Builder::new()
+                .name(name.into())
+                .spawn(move || thread(state))
+                .unwrap_or_else(|e| panic!("failed to spawn the {name} thread: {e}"));
+            Self()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (name, thread);
+            let mut state = state;
+            Self(Some(std::cell::RefCell::new(Box::new(move || here(&mut state)))))
+        }
+    }
+
+    /// Does the worker's queued work, in the browser; a thread does it on
+    /// its own elsewhere.
+    pub fn run(&self) {
+        #[cfg(target_arch = "wasm32")]
+        if let Some(here) = &self.0
+            && let Ok(mut here) = here.try_borrow_mut()
+        {
+            here();
+        }
+    }
+}
+
 /// Runs `future` in the background with nothing waiting on it.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn spawn_detached(future: impl std::future::Future<Output = ()> + Send + 'static) {

@@ -1950,7 +1950,7 @@ index 0745999..e6c8d0b 100644
              compute_layout,
              cull_layout,
 diff --git a/pomme-client/src/renderer/chunk/mesher.rs b/pomme-client/src/renderer/chunk/mesher.rs
-index c49e24b..664a284 100644
+index c49e24b..2ef6427 100644
 --- a/pomme-client/src/renderer/chunk/mesher.rs
 +++ b/pomme-client/src/renderer/chunk/mesher.rs
 @@ -380,9 +380,9 @@ pub struct ChunkMeshData {
@@ -1966,7 +1966,18 @@ index c49e24b..664a284 100644
  }
  
  #[derive(Clone, Copy, Debug, Default)]
-@@ -1057,7 +1057,7 @@ impl MeshDispatcher {
+@@ -922,7 +922,9 @@ impl MeshDispatcher {
+             .map(|n| (n.get() / 2).clamp(2, 16))
+             .unwrap_or(2);
+         let mut workers = Vec::with_capacity(worker_count);
+-        for _ in 0..worker_count {
++        // The browser meshes on the game's thread (`drain_results`).
++        let threads = if cfg!(target_arch = "wasm32") { 0 } else { worker_count };
++        for _ in 0..threads {
+             let queue = Arc::clone(&queue);
+             let claimed = Arc::clone(&claimed);
+             workers.push(
+@@ -1057,7 +1059,7 @@ impl MeshDispatcher {
              upload_epoch: self.next_epoch.fetch_add(1, Ordering::Relaxed),
              sections: request.sections,
              is_recompile: request.recompile,
@@ -1975,7 +1986,7 @@ index c49e24b..664a284 100644
              snapshot: Mutex::new(Some(self.build_snapshot(chunk_store, request.pos))),
              render_view: self.render_view.clone(),
              uv_map: Arc::clone(&self.uv_map),
-@@ -1094,7 +1094,7 @@ impl MeshDispatcher {
+@@ -1094,7 +1096,7 @@ impl MeshDispatcher {
          sections: std::ops::Range<i32>,
          content_gen: u64,
      ) -> ChunkMeshData {
@@ -1984,7 +1995,20 @@ index c49e24b..664a284 100644
          let mut snapshot = self.build_snapshot(chunk_store, pos);
          let mut mesh = mesh_chunk_snapshot(
              &mut snapshot,
-@@ -1241,7 +1241,7 @@ struct PendingJob {
+@@ -1195,6 +1197,12 @@ impl MeshDispatcher {
+     /// earlier ones the caller still has waiting to upload
+     /// ([`MAX_PENDING_RESULTS`]).
+     pub fn drain_results(&self, held: usize) -> impl Iterator<Item = ChunkMeshData> + '_ {
++        #[cfg(target_arch = "wasm32")]
++        self.queue.run_here(
++            &self.claimed,
++            MAX_PENDING_RESULTS.saturating_sub(held + self.result_rx.len()),
++            std::time::Duration::from_millis(8),
++        );
+         self.priority_rx.try_iter().chain(
+             self.result_rx
+                 .try_iter()
+@@ -1241,7 +1249,7 @@ struct PendingJob {
      upload_epoch: u64,
      sections: std::ops::Range<i32>,
      is_recompile: bool,
@@ -1993,7 +2017,7 @@ index c49e24b..664a284 100644
      snapshot: Mutex<Option<ChunkStoreSnapshot>>,
      render_view: OwnedBlockRenderView,
      uv_map: Arc<AtlasUVMap>,
-@@ -1259,7 +1259,7 @@ impl PendingJob {
+@@ -1259,7 +1267,7 @@ impl PendingJob {
      }
  
      fn run(&self, mut snapshot: ChunkStoreSnapshot) {
@@ -2002,7 +2026,7 @@ index c49e24b..664a284 100644
          let mut mesh = mesh_chunk_snapshot(
              &mut snapshot,
              self.pos,
-@@ -1269,7 +1269,7 @@ impl PendingJob {
+@@ -1269,7 +1277,7 @@ impl PendingJob {
              self.sections.clone(),
              &self.pool,
          );
@@ -2011,8 +2035,153 @@ index c49e24b..664a284 100644
          mesh.incarnation = self.incarnation;
          mesh.content_gen = self.content_gen;
          mesh.upload_epoch = self.upload_epoch;
+@@ -1405,31 +1413,51 @@ impl MeshQueue {
+             while self.published.load(Ordering::Acquire) == seen
+                 && let Some(job) = batch.take()
+             {
+-                // Each generation meshes once: the first worker to raise the
+-                // column's claim takes the job's snapshot.
+-                let generation = job.content_gen;
+-                let won = claimed
+-                    .get(job.pos)
+-                    .try_update(Ordering::AcqRel, Ordering::Acquire, |taken| {
+-                        (taken < generation).then_some(generation)
+-                    })
+-                    .is_ok();
+-                let Some(snapshot) = won.then(|| job.snapshot.lock().unwrap().take()).flatten()
+-                else {
+-                    continue;
+-                };
+-                // A panicking job must not kill the worker thread; its column
+-                // stays unmeshed until it is next marked dirty.
+-                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.run(snapshot)))
+-                    .is_err()
+-                {
+-                    tracing::error!("chunk mesh job panicked; worker continuing");
+-                }
++                run_job(job, claimed);
++            }
++        }
++    }
++
++    /// The browser's stand-in for the workers: up to `limit` jobs of the
++    /// current batch, on the game's thread, for at most `budget`.
++    #[cfg(target_arch = "wasm32")]
++    fn run_here(&self, claimed: &ChunkRing<AtomicU64>, limit: usize, budget: std::time::Duration) {
++        let start = web_time::Instant::now();
++        let batch = Arc::clone(&self.batch.lock().unwrap());
++        let mut ran = 0;
++        while ran < limit
++            && start.elapsed() < budget
++            && let Some(job) = batch.take()
++        {
++            if run_job(job, claimed) {
++                ran += 1;
+             }
+         }
+     }
+ }
+ 
++/// Runs `job` if this is the first to claim its generation; whether it ran.
++fn run_job(job: &Arc<PendingJob>, claimed: &ChunkRing<AtomicU64>) -> bool {
++    // Each generation meshes once: the first worker to raise the column's
++    // claim takes the job's snapshot.
++    let generation = job.content_gen;
++    let won = claimed
++        .get(job.pos)
++        .try_update(Ordering::AcqRel, Ordering::Acquire, |taken| {
++            (taken < generation).then_some(generation)
++        })
++        .is_ok();
++    let Some(snapshot) = won.then(|| job.snapshot.lock().unwrap().take()).flatten() else {
++        return false;
++    };
++    // A panicking job must not kill the worker thread; its column stays
++    // unmeshed until it is next marked dirty.
++    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| job.run(snapshot))).is_err() {
++        tracing::error!("chunk mesh job panicked; worker continuing");
++    }
++    true
++}
++
+ /// Run mesh workers below normal priority so the OS preempts them for the
+ /// main/render thread during a load burst, while they still use idle cores.
+ #[cfg(windows)]
+diff --git a/pomme-client/src/renderer/chunk/occlusion_graph.rs b/pomme-client/src/renderer/chunk/occlusion_graph.rs
+index 3f385d9..6f91fc5 100644
+--- a/pomme-client/src/renderer/chunk/occlusion_graph.rs
++++ b/pomme-client/src/renderer/chunk/occlusion_graph.rs
+@@ -593,6 +593,7 @@ enum Message {
+ pub struct Walker {
+     tx: Sender<Message>,
+     rx: Receiver<Visibility>,
++    pump: crate::tasks::Pump,
+ }
+ 
+ /// The thread only ends early by panicking; the game goes down with it.
+@@ -602,11 +603,23 @@ impl Walker {
+     pub fn spawn() -> Self {
+         let (tx, messages) = crossbeam_channel::unbounded();
+         let (results, rx) = crossbeam_channel::unbounded();
+-        std::thread::Builder::new()
+-            .name("chunk-occlusion".into())
+-            .spawn(move || run(&messages, &results))
+-            .expect("failed to spawn the chunk occlusion thread");
+-        Self { tx, rx }
++        let pump = crate::tasks::Pump::spawn(
++            "chunk-occlusion",
++            (WalkState::default(), messages, results),
++            |(mut state, messages, results)| {
++                for message in &messages {
++                    if !state.handle(message, &results) {
++                        break;
++                    }
++                }
++            },
++            |(state, messages, results)| {
++                for message in messages.try_iter() {
++                    state.handle(message, results);
++                }
++            },
++        );
++        Self { tx, rx, pump }
+     }
+ 
+     pub fn update(&self, update: Update) {
+@@ -620,6 +633,7 @@ impl Walker {
+     }
+ 
+     pub fn try_result(&self) -> Option<Visibility> {
++        self.pump.run();
+         crate::util::try_recv_live(&self.rx, THREAD_GONE)
+     }
+ }
+@@ -660,16 +674,15 @@ impl WalkState {
+ }
+ 
+ /// Ends when the game drops its [`Walker`].
+-fn run(messages: &Receiver<Message>, results: &Sender<Visibility>) {
+-    let mut state = WalkState::default();
+-    for message in messages {
++impl WalkState {
++    /// Applies an update or answers a walk; false once nobody hears walks.
++    fn handle(&mut self, message: Message, results: &Sender<Visibility>) -> bool {
+         match message {
+-            Message::Update(update) => state.apply(update),
+-            Message::Walk(walk) => {
+-                if results.send(state.walk(&walk)).is_err() {
+-                    break;
+-                }
++            Message::Update(update) => {
++                self.apply(update);
++                true
+             }
++            Message::Walk(walk) => results.send(self.walk(&walk)).is_ok(),
+         }
+     }
+ }
 diff --git a/pomme-client/src/renderer/distant/worker.rs b/pomme-client/src/renderer/distant/worker.rs
-index 3824a76..1072620 100644
+index 3824a76..768f298 100644
 --- a/pomme-client/src/renderer/distant/worker.rs
 +++ b/pomme-client/src/renderer/distant/worker.rs
 @@ -6,7 +6,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
@@ -2025,7 +2194,38 @@ index 3824a76..1072620 100644
  
  use crossbeam_channel::{Receiver, Sender};
  use parking_lot::{Mutex, RwLock};
-@@ -852,15 +853,15 @@ mod tests {
+@@ -187,6 +188,14 @@ impl DistantTerrain {
+         // Games left may still be writing to the same folders.
+         let earlier = std::mem::take(&mut *STOPPING.lock());
+         let in_memory = cache_root.is_none();
++        // TODO: the browser has no thread for distant terrain yet; its jobs
++        // go nowhere and it draws nothing.
++        #[cfg(target_arch = "wasm32")]
++        let thread = {
++            drop((colors, update_tx, queue, in_memory, job_rx, wake_rx, earlier));
++            None
++        };
++        #[cfg(not(target_arch = "wasm32"))]
+         let thread = std::thread::Builder::new()
+             .name("distant-terrain".into())
+             .spawn(move || {
+@@ -195,13 +204,14 @@ impl DistantTerrain {
+                 }
+                 Worker::new(colors, update_tx, queue, in_memory).run(&job_rx, &wake_rx);
+             })
++            .map(Some)
+             .expect("failed to spawn the distant terrain thread");
+         Self {
+             jobs,
+             captures,
+             wake,
+             updates,
+-            thread: Some(thread),
++            thread,
+             view: None,
+             cache_root,
+             cache: None,
+@@ -852,15 +862,15 @@ mod tests {
          assert!(store.ingest(&states, &overworld, lit(0, 0)).is_some());
  
          assert!(store.set_cache(Some(new.clone()), 1), "another folder's");
@@ -2045,7 +2245,7 @@ index 3824a76..1072620 100644
          }
      }
  
-@@ -877,14 +878,14 @@ mod tests {
+@@ -877,14 +887,14 @@ mod tests {
          captures.lock().push("overworld".into(), lit(10, 1));
          store.take_all(&states, &captures);
          for x in [6, 0, 2] {
@@ -4861,14 +5061,62 @@ index 2c76487..47e04d0 100644
      if let Ok(json) = serde_json::to_vec(value)
          && let Err(e) = crate::util::write_atomic(path, &json)
 diff --git a/pomme-client/src/world/light/worker.rs b/pomme-client/src/world/light/worker.rs
-index 693f026..073da5b 100644
+index 693f026..6833ba4 100644
 --- a/pomme-client/src/world/light/worker.rs
 +++ b/pomme-client/src/world/light/worker.rs
-@@ -243,9 +243,12 @@ impl LightWorker {
+@@ -102,6 +102,7 @@ pub(crate) struct LightWorker {
+     unloaded: HashMap<(i32, i32), u64>,
+     has_sky: bool,
+     section_count: i32,
++    pump: crate::tasks::Pump,
+ }
+ 
+ impl LightWorker {
+@@ -113,19 +114,19 @@ impl LightWorker {
+     ) -> Self {
+         let (tx, messages) = crossbeam_channel::unbounded();
+         let (reports, rx) = crossbeam_channel::unbounded();
+-        let engine = LevelLightEngine::new(height, min_y, has_sky);
+-        std::thread::Builder::new()
+-            .name("chunk-light".into())
+-            .spawn(move || {
+-                run(
+-                    engine,
+-                    LightWorld::new(block_state_table, min_y),
+-                    &messages,
+-                    &reports,
+-                )
+-            })
+-            .expect("failed to spawn the light thread");
++        let thread = LightThread {
++            engine: LevelLightEngine::new(height, min_y, has_sky),
++            world: LightWorld::new(block_state_table, min_y),
++            light_data: LightMap::default(),
++            handled: 0,
++            messages,
++            reports,
++        };
++        let pump = crate::tasks::Pump::spawn("chunk-light", thread, LightThread::run, |t| {
++            t.run_queued();
++        });
+         Self {
++            pump,
+             tx,
+             rx,
+             sent: 0,
+@@ -240,12 +241,20 @@ impl LightWorker {
+                 this.awaited = None;
+             }
+         };
++        self.pump.run();
          while let Some(report) = crate::util::try_recv_live(&self.rx, THREAD_GONE) {
              apply(self, report);
          }
 -        let deadline = std::time::Instant::now() + EDIT_WAIT;
++        // The pump above handled all that was sent, and a page can't wait.
++        if cfg!(target_arch = "wasm32") {
++            self.awaited = None;
++        }
 +        let deadline = web_time::Instant::now() + EDIT_WAIT;
          while self.awaited.is_some() {
 -            match self.rx.recv_deadline(deadline) {
@@ -4879,6 +5127,97 @@ index 693f026..073da5b 100644
                  Ok(report) => apply(self, report),
                  // Behind a join's chunks the light is frames away, and waiting
                  // again would stall every one of them.
+@@ -257,23 +266,45 @@ impl LightWorker {
+ }
+ 
+ /// Ends when the game drops its [`LightWorker`].
+-fn run(
+-    mut engine: LevelLightEngine,
+-    mut world: LightWorld,
+-    messages: &Receiver<Message>,
+-    reports: &Sender<Report>,
+-) {
+-    let mut light_data = LightMap::default();
+-    let mut handled = 0u64;
+-    for first in messages {
++/// The light thread: the engine and its copy of the world.
++struct LightThread {
++    engine: LevelLightEngine,
++    world: LightWorld,
++    light_data: LightMap,
++    handled: u64,
++    messages: Receiver<Message>,
++    reports: Sender<Report>,
++}
++
++impl LightThread {
++    fn run(mut self) {
++        while let Ok(first) = self.messages.recv() {
++            if !self.batch(first) {
++                break;
++            }
++        }
++    }
++
++    /// What's queued, without waiting for more.
++    fn run_queued(&mut self) {
++        if let Ok(first) = self.messages.try_recv() {
++            self.batch(first);
++        }
++    }
++
++    /// `first` and every message queued behind it, then the engine's run
++    /// and its report; false once nobody hears reports.
++    fn batch(&mut self, first: Message) -> bool {
+         let mut out = LightDirty::default();
++        let messages = self.messages.clone();
+         for message in std::iter::once(first).chain(messages.try_iter()) {
+-            handled += 1;
++            self.handled += 1;
++            let (engine, world, light_data) = (&mut self.engine, &mut self.world, &mut self.light_data);
+             match message {
+                 Message::Task(task) => engine.queue_task(task),
+                 Message::ChunkLoaded { pos, chunk } => {
+                     world.insert(pos, chunk);
+-                    engine.on_chunk_loaded(&world, pos, &mut light_data);
++                    engine.on_chunk_loaded(world, pos, light_data);
+                 }
+                 Message::ChunkUnloaded(pos) => {
+                     world.remove(pos);
+@@ -286,19 +317,17 @@ fn run(
+                     old,
+                     new,
+                     empty_flip,
+-                } => engine.on_block_changed(&world, pos, old, new, empty_flip),
+-                Message::BlockDirty(pos) => engine.on_block_dirty(&world, pos),
++                } => engine.on_block_changed(world, pos, old, new, empty_flip),
++                Message::BlockDirty(pos) => engine.on_block_dirty(world, pos),
+             }
+         }
+-        engine.run(&world, &mut light_data, &mut out);
++        self.engine.run(&self.world, &mut self.light_data, &mut out);
+         let report = Report {
+-            handled,
+-            columns: light_data.take_touched(),
++            handled: self.handled,
++            columns: self.light_data.take_touched(),
+             dirty: out,
+         };
+-        if reports.send(report).is_err() {
+-            break;
+-        }
++        self.reports.send(report).is_ok()
+     }
+ }
+ 
+@@ -312,6 +341,7 @@ mod tests {
+         let (tx, messages) = crossbeam_channel::unbounded();
+         let (reports, rx) = crossbeam_channel::unbounded();
+         let worker = LightWorker {
++            pump: crate::tasks::Pump::default(),
+             tx,
+             rx,
+             sent: 0,
 diff --git a/pomme-dirs/Cargo.toml b/pomme-dirs/Cargo.toml
 index 67447d8..cdf6207 100644
 --- a/pomme-dirs/Cargo.toml

@@ -65,31 +65,50 @@ guiScale();
 addEventListener('resize', guiScale);
 const setProgress = fraction => { fill.style.width = `${Math.min(1, fraction) * 100}%`; };
 
-// The logo and font are the game's own textures, once a download has stored
-// them; a first visit looks again while the game installs.
-let logoShown = false, looked = 0;
-const stored = async suffix => {
-  const bytes = await assetFind(suffix).catch(() => undefined);
-  return bytes && new Blob([bytes], {type: 'image/png'});
-};
-async function showTextures() {
-  if ((logoShown && font) || Date.now() - looked < 2000) return;
+// The logo and font are the game's own textures. A visit caches them in
+// localStorage once the game files hold them (early.js shows the logo from
+// there before the first paint); a first visit looks again while the game
+// installs.
+const cached = name => { try { return localStorage.getItem(name); } catch { return null; } };
+const cache = (name, url) => { try { localStorage.setItem(name, url); } catch {} };
+const dataUrl = blob => new Promise(resolve => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.readAsDataURL(blob);
+});
+// Through an image: the page may load images from data URLs, not fetch them.
+const useFont = url => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => { font = loadFont(image); drawText(lastText); resolve(); };
+  image.onerror = reject;
+  image.src = url;
+});
+let logoShown = !!cached('pomme-logo'), looked = 0;
+const cachedFont = cached('pomme-font');
+if (cachedFont) useFont(cachedFont).catch(() => {});
+async function showTextures(now = false) {
+  if ((logoShown && font) || (!now && Date.now() - looked < 2000)) return;
   looked = Date.now();
+  const stored = async suffix => {
+    const bytes = await assetFind(suffix).catch(() => undefined);
+    return bytes && dataUrl(new Blob([bytes], {type: 'image/png'}));
+  };
   if (!font) {
-    const blob = await stored('/assets/minecraft/textures/font/ascii.png');
-    if (blob) { font = loadFont(await createImageBitmap(blob)); drawText(lastText); }
+    const url = await stored('/assets/minecraft/textures/font/ascii.png');
+    if (url) { cache('pomme-font', url); await useFont(url).catch(e => console.warn('font', e)); }
   }
   if (!logoShown) {
-    const blob = await stored('/textures/gui/title/mojangstudios.png');
-    if (blob) {
+    const url = await stored('/textures/gui/title/mojangstudios.png');
+    if (url) {
       logoShown = true;
-      const url = URL.createObjectURL(blob);
-      for (const half of document.querySelectorAll('#logo div')) half.style.backgroundImage = `url(${url})`;
+      cache('pomme-logo', url);
+      document.documentElement.style.setProperty('--logo', `url(${url})`);
     }
   }
 }
 say('Downloading the game...');
 showTextures();
+const lookAgain = setInterval(showTextures, 2000);
 
 /// The service worker must control the page before the game makes requests
 /// to Mojang, so a first visit reloads once it's installed.
@@ -130,7 +149,12 @@ try {
   // The page's screen stays over the canvas until the game is at its menu,
   // showing the game's own progress meanwhile.
   globalThis.pommeSplash = (progress, text) => { setProgress(progress); say(text); showTextures(); };
-  globalThis.pommeReady = () => loading.classList.add('done');
+  globalThis.pommeReady = () => {
+    loading.classList.add('done');
+    clearInterval(lookAgain);
+    // The game files are surely in by now, for the next visit's cache.
+    showTextures(true);
+  };
   await start(document.getElementById('pomme'));
 } catch (e) {
   console.error(e);

@@ -31,6 +31,6 @@ BINDGEN="$HERE/tools/wasm-bindgen"
   echo "Install wasm-bindgen 0.2.121: cargo install wasm-bindgen-cli --version 0.2.121" >&2; exit 1; }
 "$BINDGEN" --target web --no-typescript --out-dir "$DIST" --out-name pomme \
   "$REPO/target/wasm32-unknown-unknown/$PROFILE/pomme_client.wasm"
-cp "$HERE"/web/*.mjs "$HERE"/web/sw.js "$HERE"/web/index.html "$DIST"/
+cp "$HERE"/web/*.mjs "$HERE"/web/*.js "$HERE"/web/index.html "$DIST"/
 rm -f "$DIST"/*.test.mjs
 echo "Built $DIST"

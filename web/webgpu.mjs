@@ -53,7 +53,9 @@ export function configure(width, height) {
   canvas.width = Math.min(max, Math.max(1, width));
   canvas.height = Math.min(max, Math.max(1, height));
   context.configure({device, format, alphaMode: 'opaque',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC});
+    // Sampled too: the menu blur reads back what the frame drew so far.
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+      | GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING});
   return format;
 }
 

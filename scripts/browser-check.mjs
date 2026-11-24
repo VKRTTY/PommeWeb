@@ -1,6 +1,9 @@
 // Opens the built page in a real Chrome window (headless Chrome has no GPU
 // on macOS), prints its console, and saves screenshots.
 //   node scripts/browser-check.mjs <url> <seconds> <screenshot.png> [every-seconds]
+//   node scripts/browser-check.mjs <url> - <out-dir> <actions.json>
+// An actions file is a list of steps: ["wait", seconds], ["shot", name],
+// ["click", x, y] (CSS pixels), ["key", "Escape"], ["type", "text"], ["reload"], ["eval", "js"].
 import {spawn} from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
@@ -56,6 +59,38 @@ const capture = async file => {
   const r = await send('Page.captureScreenshot', {format: 'png'});
   if (r.result?.data) await fs.writeFile(file, Buffer.from(r.result.data, 'base64'));
 };
+if (seconds === '-') {
+  const steps = JSON.parse(await fs.readFile(every, 'utf8'));
+  await fs.mkdir(shot, {recursive: true});
+  const key = async (type, k) => {
+    const code = k.length === 1 ? `Key${k.toUpperCase()}` : k;
+    await send('Input.dispatchKeyEvent', {type, key: k, code,
+      ...(k.length === 1 && type === 'keyDown' ? {text: k} : {}),
+      windowsVirtualKeyCode: k === 'Escape' ? 27 : k === 'Enter' ? 13 : k.toUpperCase().charCodeAt(0)});
+  };
+  for (const [what, ...args] of steps) {
+    if (what === 'wait') await sleep(args[0] * 1000);
+    else if (what === 'shot') { await capture(path.join(shot, `${args[0]}.png`)); console.log(`shot: ${args[0]}`); }
+    else if (what === 'click') {
+      const [x, y] = args;
+      await send('Input.dispatchMouseEvent', {type: 'mouseMoved', x, y});
+      await sleep(50);
+      await send('Input.dispatchMouseEvent', {type: 'mousePressed', x, y, button: 'left', clickCount: 1});
+      await sleep(50);
+      await send('Input.dispatchMouseEvent', {type: 'mouseReleased', x, y, button: 'left', clickCount: 1});
+    } else if (what === 'eval') {
+      const r = await send('Runtime.evaluate', {expression: args[0], returnByValue: true, awaitPromise: true});
+      console.log(`eval: ${args[0]} => ${JSON.stringify(r.result?.result?.value)}`);
+    } else if (what === 'reload') await send('Page.reload', {ignoreCache: false});
+    else if (what === 'key') { await key('keyDown', args[0]); await sleep(30); await key('keyUp', args[0]); }
+    else if (what === 'type') for (const c of args[0]) { await key('keyDown', c); await key('keyUp', c); await sleep(20); }
+    await sleep(100);
+  }
+  ws.close();
+  proc.kill();
+  await fs.rm(profile, {recursive: true, force: true}).catch(() => {});
+  process.exit(0);
+}
 const total = Number(seconds) * 1000;
 const step = Number(every) * 1000;
 let shots = 0;
